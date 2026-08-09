@@ -1,0 +1,214 @@
+
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077
+# chui container spark chạy chương trình pyspark có sẵn
+
+docker exec -it spark-master ls /opt/spark-data
+# kiểm tra xem thư mục data được mount chuẩn chưa
+
+exit() # để out ra ngoài spark
+
+----- MinIO -----
+
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --conf spark.jars.ivy=/tmp/.ivy --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 --conf spark.hadoop.fs.s3a.access.key=minioadmin --conf spark.hadoop.fs.s3a.secret.key=minioadmin --conf spark.hadoop.fs.s3a.path.style.access=true --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+/* jar connector của minIO
+-packages : báo spark tự động tải về 2 thư viện từ maven(cần khớp với bản build spark đi kèm)
+-conf ivy: làm thư mục cache để tải packages về
+-conf endpoint : báo spark khi thấy s3a thì gửi request tới địa chỉ này
+-conf access & secret key : cặp khóa xác thực
+-conf path.style : kết nối đặc thù minio
+-conf impl : báo spark dùng đúng class java này để xử lý
+*/
+
+/*
+Lí do chưa cài dockerfile và conf
+- dùng -packages để các file jar từ internet mỗi lần chạy để thử nghiệm trước khi 
+customer dockerfile và conf(build sẵn 1 dockerfile đầy đủ image)
+*/
+---- CODE
+df = spark.read.parquet("/opt/spark-data/employees_parquet")
+# chú ý tạo bucket spark-bucket trên minio trước
+df.write.mode("overwrite").parquet("s3a://spark-bucket/employees/")
+df_from_minio = spark.read.parquet("s3a://spark-bucket/employees/")
+df_from_minio.show()
+
+----- POSGRESSQL -----
+
+JDBC là chuẩn giao tiếp giữa java và csdl quan hệ. Mỗi CSDL có JDBC riêng
+file jar này đóng vai trò phiên dịch SQL sang giao thức mà CSDL hiểu
+Thay vì packages giao thức s3a thì bây giờ ta gọi packages JDBC
+
+docker exec -it postgres psql -U admin -d companydb
+# Vào trong postgres
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    customer_name VARCHAR(100),
+    amount NUMERIC,
+    order_date DATE
+);
+
+INSERT INTO orders (customer_name, amount, order_date) VALUES
+('An', 150.5, '2024-01-05'),
+('Binh', 300.0, '2024-01-06'),
+('Chi', 89.9, '2024-01-07'),
+('Dung', 420.0, '2024-01-08');
+
+\q # để out ra ngoài container postgres
+
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.postgresql:postgresql:42.7.3
+# Mở Spark với driver postgres
+
+df = spark.read.format("jdbc").option("url", "jdbc:postgresql://postgres:5432/companydb").option("dbtable", "orders").option("user", "admin").option("password", "admin123").option("driver", "org.postgresql.Driver").load()
+df.show() 
+
+df.write.format("jdbc").option("url", "jdbc:postgresql://postgres:5432/companydb").option("dbtable", "orders_backup").option("user", "admin").option("password", "admin123").option("driver", "org.postgresql.Driver").mode("overwrite").save()
+
+#chú ý: spark chỉ đọc với 1 kết nối, 1 partition duy nhất
+
+------ DELTA LAKE ------
+
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages io.delta:delta-spark_2.12:3.2.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 --conf spark.hadoop.fs.s3a.access.key=minioadmin --conf spark.hadoop.fs.s3a.secret.key=minioadmin --conf spark.hadoop.fs.s3a.path.style.access=true --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+/*
+-packages : gói của delta lake
+-conf extensions và -conf catalog : kích hoạt SQL xử lý theo delta lake
+*/
+
+1. Ghi delta
+data = [(1, "An", "Engineering", 1200), (2, "Binh", "Sales", 900)]
+df = spark.createDataFrame(data, ["id", "name", "department", "salary"])
+df.write.format("delta").mode("overwrite").save("s3a://spark-bucket/delta/employees")
+
+2. Thực hành update
+from delta.tables import DeltaTable
+delta_table = DeltaTable.forPath(spark, "s3a://spark-bucket/delta/employees")
+delta_table.update(
+    condition="name = 'An'",
+    set={"salary": "1500"}
+)
+delta_table.toDF().show()
+
+3. Time Travel
+
+df_old = spark.read.format("delta").option("versionAsOf", 0).load("s3a://spark-bucket/delta/employees")
+df_old.show()
+
+------ APACHE ICEBERG -------
+
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.local.type=hadoop --conf spark.sql.catalog.local.warehouse=s3a://spark-bucket/iceberg-warehouse --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 --conf spark.hadoop.fs.s3a.access.key=minioadmin --conf spark.hadoop.fs.s3a.secret.key=minioadmin --conf spark.hadoop.fs.s3a.path.style.access=true --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+/*
+-packages : gói của Iceberg
+-conf extensions
+-conf catalog (3 cái) : một danh bạ quản lý các bảng iceberg tồn tại ở đâu
+*/
+
+1. Tạo bảng và đọc
+spark.sql("""
+    CREATE TABLE local.db.employees (
+        id INT,
+        name STRING,
+        department STRING,
+        salary DOUBLE
+    ) USING iceberg
+""")
+
+spark.sql("""
+    INSERT INTO local.db.employees VALUES
+    (1, 'An', 'Engineering', 1200),
+    (2, 'Binh', 'Sales', 900)
+""")
+
+spark.sql("SELECT * FROM local.db.employees").show()
+
+2. update
+spark.sql("UPDATE local.db.employees SET salary = 1500 WHERE name = 'An'")
+
+3. time travel
+spark.sql("SELECT * FROM local.db.employees.history").show()
+# xem lịch sử snapshot
+
+------ HIVE METASTORE --------
+
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages io.delta:delta-spark_2.12:3.2.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog --conf spark.hadoop.hive.metastore.uris=thrift://hive-metastore:9083 --conf spark.sql.catalogImplementation=hive --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 --conf spark.hadoop.fs.s3a.access.key=minioadmin --conf spark.hadoop.fs.s3a.secret.key=minioadmin --conf spark.hadoop.fs.s3a.path.style.access=true --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+/*
+Thêm 2 dòng mới vào cách kết nối của delta lake
+-conf hive : báo delta lake khi cần tra cứu bảng, hãy hỏi metastore ở địa chỉ này
+-conf catalog = hive : dùng hive làm catalog chính thức
+*/
+SỬA LỖI:
+- cần cài các file java từ trên maven về thư mục hive-lib rồi gắn vào volumns của hive(vì spark submit không thể tự cài)
+- cần thêm file hive-conf/core-site.xml chứa thông số minio vì hive chưa biết
+- Cần thêm healcheck do hive cần db-hive bật lên thành công trước
+
+# 1. Xóa database bị lỗi cũ
+spark.sql("DROP DATABASE IF EXISTS companydb CASCADE")
+
+# 2. Tạo lại database với LOCATION trỏ vào MinIO
+spark.sql("CREATE DATABASE companydb LOCATION 's3a://spark-bucket/warehouse/companydb.db'")
+
+# 3. Chuyển sang dùng database mới
+spark.sql("USE companydb")
+
+# 4. Tạo lại bảng Delta
+spark.sql("""
+    CREATE TABLE employees (
+        id INT, name STRING, department STRING, salary DOUBLE
+    ) USING delta
+    LOCATION 's3a://spark-bucket/warehouse/employees'
+""")
+
+spark.sql("INSERT INTO employees VALUES (1, 'An', 'Engineering', 1200)")
+spark.sql("SELECT * FROM employees").show()
+
+# 5. Thoát spark kiểm tra xem bảng còn không (vì nếu lưu catalog trên minio thì chỉ có spark session hiện tại mới đọc được)
+
+spark.sql("SHOW TABLES IN companydb").show()
+spark.sql("SELECT * FROM companydb.employees").show()
+
+------ TRINO ------
+Thêm folder trino-conf
+- config.properties : Cấu hình 1 node duy nhất trino vừa là master vừa là worker
+- node.properties
+- trino-conf/catalog/delta.properties : trino connector dành riêng cho delta lake
+- jvm.config :
+Chú ý: Toàn bộ cái này không cần thiết chỉ cần catalog/delta.properties nếu ta chỉ đơn giản hóa nó
+       Gắn volumns - ./trino-conf/catalog:/etc/trino/catalog
+
+docker exec -it trino trino
+# vào trino
+
+
+------ DỰ ÁN THỰC TẾ --------
+1. Cài đặt
+cài dockerfile của spark : tự động
+- Cài tất cả các file jar từ đầu đến cuối bây giờ
+- thêm folder conf/spark-defaults.conf (không cần phải viết dài ngoằng trong sparksession nữa)
+
+cài dockerfile của hive : tự động
+- cài tất cả các file jar trong hive-lib
+- xóa hive-lib vì không cần nữa
+ 
+thêm volumns cho spark : - ./spark/jobs:/opt/spark/jobs để spark chạy được file bên ngoài
+
+2. Các câu lệnh cần thiết
+
+====== SPARK ===== 
+docker exec -it spark-master /opt/spark/bin/pyspark --master spark://spark-master:7077
+# khi muốn vào spark để chỉnh sửa gì đó
+
+docker exec -it spark-master /opt/spark/bin/spark-submit \
+  --master spark://spark-master:7077 \
+  /opt/spark/jobs/transform_silver.py
+# Câu lệnh để chạy các file bên ngoài bẳng spark chỉ cần khai báo thêm vị trí file trong container spark
+
+exit() # thoát ra
+
+===== TRINO =====
+
+docker exec -it trino trino       # vào trino
+
+show catalogs;
+show schema from delta;
+show schemas from delta;
+show tables from delta.gold;
+
+exit # thoát ra

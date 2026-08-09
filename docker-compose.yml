@@ -1,0 +1,213 @@
+version: '3.8'
+
+name: new-datalakehouse
+services:
+  spark-master:
+    image: my-spark:3.5.1-custom  
+    build: .                      # <-- Thêm dòng này để auto-build nếu chưa có image
+    container_name: spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+      - "4040:4040"
+    networks:
+      - spark-network
+    volumes:
+      - ./data:/opt/spark-data
+      - ./spark/jobs:/opt/spark/jobs # Thêm đường dẫn trong container để chạy file bên ngoài
+
+  spark-worker-1:
+    image: my-spark:3.5.1-custom  
+    container_name: spark-worker-1
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2g
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"
+    networks:
+      - spark-network
+    volumes:
+      - ./data:/opt/spark-data
+      - ./spark/jobs:/opt/spark/jobs # Thêm đường dẫn trong container để chạy file bên ngoài
+
+  spark-worker-2:
+    image: my-spark:3.5.1-custom  
+    container_name: spark-worker-2
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    environment:
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2g
+    depends_on:
+      - spark-master
+    ports:
+      - "8082:8081"
+    networks:
+      - spark-network
+    volumes:
+      - ./data:/opt/spark-data
+      - ./spark/jobs:/opt/spark/jobs # Thêm đường dẫn trong container để chạy file bên ngoài
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001" 
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - spark-network
+    volumes:
+      - minio-data:/data
+
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+      - POSTGRES_DB=companydb
+    ports:
+      - "5234:5432"
+    networks:
+      - spark-network
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  hive-metastore-db:
+    image: postgres:15
+    container_name: hive-metastore-db
+    environment:
+      - POSTGRES_USER=hive
+      - POSTGRES_PASSWORD=hive123
+      - POSTGRES_DB=metastore_db
+    networks:
+      - spark-network
+    volumes:
+      - hive-metastore-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  hive-metastore:
+    build:
+      context: ./hive-metastore-build
+    container_name: hive-metastore
+    environment:
+      - SERVICE_NAME=metastore
+      - DB_DRIVER=postgres
+      - SERVICE_OPTS=-Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver 
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://hive-metastore-db:5432/metastore_db 
+        -Djavax.jdo.option.ConnectionUserName=hive 
+        -Djavax.jdo.option.ConnectionPassword=hive123
+    ports:
+      - "9083:9083"
+    depends_on:
+      hive-metastore-db:
+        condition: service_healthy
+    networks:
+      - spark-network
+    volumes:
+      - ./hive-conf/core-site.xml:/opt/hive/conf/core-site.xml
+
+  trino:
+    image: trinodb/trino:455
+    container_name: trino
+    ports:
+      - "8085:8080"
+    volumes:
+      - ./trino-conf/catalog:/etc/trino/catalog
+    depends_on:
+      - hive-metastore
+      - minio
+    networks:
+      - spark-network
+  
+  metabase:
+    image: metabase/metabase:v0.50.8
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    networks:
+      - spark-network
+    depends_on:
+      - trino
+
+  airflow-db:
+    image: postgres:15
+    container_name: airflow-db
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow123
+      - POSTGRES_DB=airflow_db
+    networks:
+      - spark-network
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: airflow-init
+    depends_on:
+      - airflow-db
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@airflow-db:5432/airflow_db
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - "airflow db migrate && airflow users create --username admin --password admin123 --firstname Admin --lastname User --role Admin --email admin@example.com"
+    networks:
+      - spark-network
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    container_name: airflow-webserver
+    depends_on:
+      - airflow-init
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@airflow-db:5432/airflow_db
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=my_shared_secret_key_12345  # Thêm cái này để spark ghi log lên ui airflow
+    ports:
+      - "8090:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock # Câu lệnh giúp airflow điểu khiển các container khác(spark)
+    command: webserver
+    networks:
+      - spark-network
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    container_name: airflow-scheduler
+    depends_on:
+      - airflow-init
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@airflow-db:5432/airflow_db
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=my_shared_secret_key_12345  # Thêm cái này để spark ghi log lên ui airflow
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock # Câu lệnh giúp airflow điểu khiển các container khác(spark)
+    command: scheduler
+    networks:
+      - spark-network
+
+networks:
+  spark-network:
+    driver: bridge
+
+volumes:
+  airflow-db-data:
+  minio-data:
+  postgres-data:
+  hive-metastore-data:
