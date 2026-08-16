@@ -1,5 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, trim, initcap
+from pyspark.sql import DataFrame
 
 def create_spark_session():
     return SparkSession.builder \
@@ -7,47 +8,45 @@ def create_spark_session():
         .enableHiveSupport() \
         .getOrCreate()
 
-def load_bronze(spark):
-    orders = spark.read.format("delta").load("s3a://spark-bucket/lakehouse/bronze/orders_raw")
-    customers = spark.read.format("delta").load("s3a://spark-bucket/lakehouse/bronze/customers_raw")
-    return orders, customers
+def clean_users(df: DataFrame) -> DataFrame:
+    return df.na.drop()
 
-def clean_customers(customers):
-    return customers \
-        .withColumn("customer_name", trim(initcap(col("customer_name")))) \
-        .withColumn("city", trim(initcap(col("city")))) \
-        .dropDuplicates(["customer_id"])
+def clean_products(df: DataFrame) -> DataFrame:
+    return df.na.drop()
 
-def build_orders_enriched(orders, customers_cleaned):
-    orders_valid = orders.filter(col("amount") > 0)
+def clean_reviews(df: DataFrame) -> DataFrame:
+    return df.na.drop()
 
-    enriched = orders_valid.join(
-        customers_cleaned,
-        on="customer_id",
-        how="inner"
-    )
+def clean_purchases(df: DataFrame) -> DataFrame:
+    return df.na.drop()
 
-    return enriched.select(
-        "order_id", "customer_id", "customer_name", "city",
-        "amount", "order_date"
-    )
+def clean_sessions(df: DataFrame) -> DataFrame:
+    return df.na.drop()
+
+def clean_interactions(df: DataFrame) -> DataFrame:
+    return df.na.drop()
 
 def main():
     spark = create_spark_session()
 
-    orders, customers = load_bronze(spark)
-    customers_cleaned = clean_customers(customers)
-    orders_enriched = build_orders_enriched(orders, customers_cleaned)
+    tables = [
+            "users", 
+            "products", 
+            "sessions", 
+            "interactions", 
+            "purchases", 
+            "reviews"
+        ]
 
-    spark.sql("CREATE DATABASE IF NOT EXISTS silver")
+    print("--- BẮT ĐẦU TRANSFORM ---")
+    for table in tables:
+        bronze_table = f"bronze.bronze_{table}"
+        df = spark.read.table(bronze_table)
+        #dedup
 
-    orders_enriched.write \
-        .format("delta") \
-        .mode("overwrite") \
-        .option("path", "s3a://spark-bucket/lakehouse/silver/orders_enriched") \
-        .saveAsTable("silver.orders_enriched")
-
-    print(f"[Silver] orders_enriched: {orders_enriched.count()} rows")
+        silver_table = f"silver.silver_{table}"
+        df.write.format("delta").mode("overwrite").saveAsTable(silver_table)
+        print(f"[Silver] Cleaned table {table}: {df.count()} rows -> {silver_table}")
 
     spark.stop()
 
