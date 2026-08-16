@@ -1,0 +1,8 @@
+Day 1: 
+- dataset e commerce 
+- tạo table trong database postgres
+- sử dụng metadata-driven (sau cùng)
+
+Day 2:
+- load data csv vào db(sử dụng copy, không quan tâm tên cột, chỉ quan tâm thứ tự cột)
+- ingest vào bronze
