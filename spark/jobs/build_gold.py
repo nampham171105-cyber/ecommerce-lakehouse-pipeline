@@ -8,13 +8,19 @@ def create_spark_session():
         .enableHiveSupport() \
         .getOrCreate()
 
+def add_surrogate_key(df: DataFrame, natural_key_cols: list, sk_name: str) -> DataFrame:
+    return df.withColumn(sk_name, sha2(concat_ws("||", *[col(c) for c in natural_key_cols]), 256))
+
 def build_dim_user(spark) -> DataFrame:
     df = spark.read.table("silver.silver_users")
+    df = add_surrogate_key(df, ["user_id"], "user_sk")
     return df.select(
+        col('user_sk'),
         col('user_id'),
         col('age'),
         col('gender'),
         col('country'),
+        col('city'),
         col('signup_date'),
         col('income_level'),
         col('preferred_category'),
@@ -23,7 +29,9 @@ def build_dim_user(spark) -> DataFrame:
 
 def build_dim_product(spark) -> DataFrame:
     df = spark.read.table("silver.silver_products")
+    df = add_surrogate_key(df, ["product_id"], "product_sk")
     return df.select(
+        col('product_sk'),
         col('product_id'),
         col('product_name'),
         col('product_description'),
@@ -40,20 +48,24 @@ def build_dim_product(spark) -> DataFrame:
 def build_dim_date(spark) -> DataFrame:
     begin_date = "2023-01-01"
     end_date = "2027-01-01"
-
-    return spark.sql(f"SELECT explode(sequence(to_date('{begin_date}'), to_date('{end_date}'), interval 1 day)) as date") \
-                    .select(
-                        # sha2(col("date").cast("string"), 256).alias("date_sk"),
-                        col("date"),
-                        year(col("date")).alias("year"),
-                        quarter(col("date")).alias("quarter"),
-                        month(col("date")).alias("month"),
-                        dayofmonth(col("date")).alias("day"),
-                        dayofweek(col("date")).alias("day_of_week") # 1: Chủ nhật, 7: Thứ bảy
-                    )
+    df = spark.sql(
+        f"SELECT explode(sequence(to_date('{begin_date}'), to_date('{end_date}'), interval 1 day)) as date"
+    )
+    df = add_surrogate_key(df, ["date"], "date_sk")
+    return df.select(
+        col("date_sk"),
+        col("date"),
+        year(col("date")).alias("year"),
+        quarter(col("date")).alias("quarter"),
+        month(col("date")).alias("month"),
+        dayofmonth(col("date")).alias("day"),
+        dayofweek(col("date")).alias("day_of_week") # 1: Chủ nhật, 7: Thứ bảy
+        )
 def build_dim_session(spark) -> DataFrame:
     df = spark.read.table("silver.silver_sessions")
+    df = add_surrogate_key(df, ["session_id"], "session_sk")
     return df.select(
+        col("session_sk"),
         col('session_id'),
         col('device_type'),
         col('referrer_source'),
@@ -62,75 +74,71 @@ def build_dim_session(spark) -> DataFrame:
 
 def build_fact_interaction(spark) -> DataFrame:
     df = spark.read.table("silver.silver_interactions")
-    dim_user = spark.read.table("gold.dim_user")
-    dim_product = spark.read.table("gold.dim_product")
-    dim_session = spark.read.table("gold.dim_session")
-    dim_date = spark.read.table("gold.dim_date")
+    dim_user = spark.read.table("gold.dim_user").select(col("user_sk"), col("user_id"))
+    dim_product = spark.read.table("gold.dim_product").select(col("product_sk"), col("product_id"))
+    dim_session = spark.read.table("gold.dim_session").select(col("session_sk"), col("session_id"))
+    dim_date = spark.read.table("gold.dim_date").select(col("date_sk"), col("date"))
 
     fact_interaction = (
         df
-        .join(dim_user, on="user_id",how="left") 
-        .join(dim_product, on="product_id",how="left") 
-        .join(dim_session, on="session_id",how="left")
-        .join(dim_date, to_date("interaction_timestamp") == col("date"),how="left")
+        .join(dim_user, on="user_id", how="inner")
+        .join(dim_product, on="product_id", how="inner")
+        .join(dim_session, on="session_id", how="inner")
+        .join(dim_date, to_date(col("interaction_timestamp")) == col("date"), how="inner")
     )
     return fact_interaction.select(
         col('interaction_id'),
-        col('user_id'),
-        col('product_id'),
-        col('session_id'),
-        col('date'),
+        col('user_sk'),
+        col('product_sk'),
+        col('session_sk'),
+        col('date_sk'),
         col('interaction_type'),
         col('dwell_time_ms')
     )
 def build_fact_purchase(spark) -> DataFrame:
     df = spark.read.table("silver.silver_purchases")
-    dim_user = spark.read.table("gold.dim_user")
-    dim_product = spark.read.table("gold.dim_product")
-    dim_session = spark.read.table("gold.dim_session")
-    dim_date = spark.read.table("gold.dim_date")
-    fact_interaction = spark.read.table("gold.fact_interaction")
+    dim_user = spark.read.table("gold.dim_user").select(col("user_sk"), col("user_id"))
+    dim_product = spark.read.table("gold.dim_product").select(col("product_sk"), col("product_id"))
+    dim_session = spark.read.table("gold.dim_session").select(col("session_sk"), col("session_id"))
+    dim_date = spark.read.table("gold.dim_date").select(col("date_sk"), col("date"))
 
     fact_purchase = (
         df
-        .join(dim_user, df["user_id"] == dim_user["user_id"], how="left")
-        .join(dim_product, df["product_id"] == dim_product["product_id"], how="left")
-        .join(dim_session, df["session_id"] == dim_session["session_id"], how="left")
-        .join(fact_interaction, df["interaction_id"] == fact_interaction["interaction_id"], how="left")
-        .join(dim_date, to_date(df["order_date"]) == dim_date["date"], how="left")
+        .join(dim_user, on="user_id", how="inner")
+        .join(dim_product, on="product_id", how="inner")
+        .join(dim_session, on="session_id", how="left")
+        .join(dim_date, to_date(col("order_date")) == col("date"), how="inner")
     )
     return fact_purchase.select(
-        df['purchase_id'],
-        df['order_id'],
-        df['user_id'],
-        df['product_id'],
-        df['session_id'],
-        df['interaction_id'],
-        dim_date['date'].alias('date'), # Lấy cột ngày từ bảng dim_date
-        df['quantity'],
-        df['unit_price'],
-        df['total_amount']
+        col("purchase_id"), 
+        col("order_id"), 
+        col('user_sk'),
+        col('product_sk'),
+        col('session_sk'),
+        col('date_sk'),
+        col("interaction_id"), 
+        col("quantity"), 
+        col("unit_price"), 
+        col("total_amount")
     )
 def build_fact_review(spark) -> DataFrame:
     df = spark.read.table("silver.silver_reviews")
-    dim_user = spark.read.table("gold.dim_user")
-    dim_product = spark.read.table("gold.dim_product")
-    dim_date = spark.read.table("gold.dim_date")
-    fact_purchase = spark.read.table("gold.fact_purchase")
+    dim_user = spark.read.table("gold.dim_user").select("user_sk", "user_id")
+    dim_product = spark.read.table("gold.dim_product").select("product_sk", "product_id")
+    dim_date = spark.read.table("gold.dim_date").select("date_sk", "date")
     fact_review = (
         df
-        .join(dim_user, df["user_id"] == dim_user["user_id"], how="left")
-        .join(dim_product, df["product_id"] == dim_product["product_id"], how="left")
-        .join(fact_purchase, df["purchase_id"] == fact_purchase["purchase_id"], how="left")
-        .join(dim_date, to_date(df["review_date"]) == dim_date["date"], how="left")
+        .join(dim_user, on="user_id", how="inner")
+        .join(dim_product, on="product_id", how="inner")
+        .join(dim_date, to_date(col("review_date")) == col("date"), how="inner")
     )
     return fact_review.select(
-        df["review_id"],
-        df["user_id"],
-        df["product_id"],
-        df["purchase_id"],
-        dim_date["date"].alias("date"), # Lấy cột ngày từ bảng dim_date
-        df["rating"]
+        col("review_id"), 
+        col('user_sk'),
+        col('product_sk'),
+        col('date_sk'),
+        col("purchase_id"), 
+        col("rating")
     )
 
 def write_gold_table(df, table_name):

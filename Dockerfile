@@ -14,6 +14,7 @@ RUN curl -L -o /opt/spark/jars/hadoop-aws-3.3.4.jar \
       https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar
 
 COPY conf/spark-defaults.conf /opt/spark/conf/spark-defaults.conf
+COPY conf/log4j2.properties /opt/spark/conf/log4j2.properties
 
 RUN mkdir -p /tmp/.ivy2 && chmod -R 777 /tmp/.ivy2
 
