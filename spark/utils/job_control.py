@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, to_timestamp, lit, max as spark_max
-#from delta import DeltaTable
+from delta import DeltaTable
 from pyspark.sql.types import StructType, StructField, StringType, TimestampNTZType
 from datetime import datetime, date
 
@@ -33,7 +33,7 @@ def _to_timestamp(val):
 # Insert một log sau khi Bronze load thành công
 def insert_log(
     spark: SparkSession,
-    schema_name: str,
+    layer: str,
     table_name: str,
     watermark_column: str,
     watermark_value,
@@ -42,7 +42,7 @@ def insert_log(
     try:
         # Định nghĩa rõ Schema để tránh Spark tự suy luận sai kiểu dữ liệu
         schema = StructType([
-            StructField("schema_name", StringType(), True),
+            StructField("layer", StringType(), True),
             StructField("table_name", StringType(), True),
             StructField("watermark_column", StringType(), True),
             StructField("watermark_value", TimestampNTZType(), True), 
@@ -51,7 +51,7 @@ def insert_log(
         ])
 
         data = [(
-            schema_name,
+            layer,
             table_name,
             watermark_column,
             _to_timestamp(watermark_value),
@@ -64,7 +64,7 @@ def insert_log(
         df = df.withColumn("insert_dt", current_timestamp().cast("timestamp_ntz"))
 
         df.write.format("delta").mode("append").saveAsTable(JOB_CONTROL_TABLE)
-        print("[JOB_CONTROL] Insert log success:")
+        print("[JOB_CONTROL] Insert log success")
 
         return True
 
@@ -74,9 +74,9 @@ def insert_log(
 
 
 # Lấy watermark gần nhất của một table
-def get_max_timestamp(
+def get_watermark(
     spark: SparkSession,
-    schema_name: str,
+    layer: str,
     table_name: str
 ):
     try:
@@ -84,7 +84,7 @@ def get_max_timestamp(
 
         row = (
             df.filter(
-                (df.schema_name == schema_name) &
+                (df.layer == layer) &
                 (df.table_name == table_name)
             )
             .agg(
@@ -102,49 +102,49 @@ def get_max_timestamp(
         return None
 
 
-# Xóa log của một table → dùng khi muốn reset và chạy full load
-# def delete_log(
-#     spark: SparkSession,
-#     schema_name: str,
-#     table_name: str
-# ) -> bool:
-#     try:
-#         delta_table = DeltaTable.forName(
-#             spark,
-#             JOB_CONTROL_TABLE
-#         )
+#Xóa log của một table → dùng khi muốn reset và chạy full load
+def delete_log(
+    spark: SparkSession,
+    layer: str,
+    table_name: str
+) -> bool:
+    try:
+        delta_table = DeltaTable.forName(
+            spark,
+            JOB_CONTROL_TABLE
+        )
 
-#         delta_table.delete(
-#             f"schema_name = '{schema_name}' "
-#             f"AND table_name = '{table_name}'"
-#         )
+        delta_table.delete(
+            f"schema_name = '{layer}' "
+            f"AND table_name = '{table_name}'"
+        )
 
-#         print(
-#             f"[JOB_CONTROL] Deleted logs: "
-#             f"{schema_name}.{table_name}"
-#         )
+        print(
+            f"[JOB_CONTROL] Deleted logs: "
+            f"{layer}.{table_name}"
+        )
 
-#         return True
+        return True
 
-#     except Exception as e:
-#         print(f"[JOB_CONTROL] Delete log failed: {e}")
-#         return False
+    except Exception as e:
+        print(f"[JOB_CONTROL] Delete log failed: {e}")
+        return False
 
 
-# # Xóa toàn bộ job control → reset toàn bộ pipeline
-# def truncate_logs(spark: SparkSession) -> bool:
-#     try:
-#         delta_table = DeltaTable.forName(
-#             spark,
-#             JOB_CONTROL_TABLE
-#         )
+# Xóa toàn bộ job control → reset toàn bộ pipeline
+def truncate_logs(spark: SparkSession) -> bool:
+    try:
+        delta_table = DeltaTable.forName(
+            spark,
+            JOB_CONTROL_TABLE
+        )
 
-#         delta_table.delete("1 = 1")
+        delta_table.delete("1 = 1")
 
-#         print("[JOB_CONTROL] All logs deleted")
+        print("[JOB_CONTROL] All logs deleted")
 
-#         return True
+        return True
 
-#     except Exception as e:
-#         print(f"[JOB_CONTROL] Truncate logs failed: {e}")
-#         return False
+    except Exception as e:
+        print(f"[JOB_CONTROL] Truncate logs failed: {e}")
+        return False

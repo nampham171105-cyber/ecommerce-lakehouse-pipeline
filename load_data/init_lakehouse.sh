@@ -13,7 +13,7 @@ CREATE SCHEMA IF NOT EXISTS delta.gold WITH (location = 's3a://lakehouse/gold/')
 CREATE SCHEMA IF NOT EXISTS delta.control WITH (location = 's3a://lakehouse/control/');
 
 CREATE TABLE IF NOT EXISTS delta.control.job_control (
-    schema_name VARCHAR,
+    layer VARCHAR,
     table_name VARCHAR,
     watermark_column VARCHAR,
     watermark_value TIMESTAMP,

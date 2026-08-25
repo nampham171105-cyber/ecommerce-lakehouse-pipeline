@@ -1,6 +1,8 @@
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import col, trim, initcap, upper, coalesce as spark_coalesce
-
+from delta.tables import DeltaTable
+from datetime import date
+from pyspark.sql.functions import col, lit, max as spark_max, coalesce as spark_coalesce
+from utils.job_control import get_watermark, insert_log
 from utils.validation import validate_row_count, dedupe_exact, dedupe_by_key, validate_business_rule
 
 SILVER_RULES = {
@@ -54,75 +56,220 @@ def create_spark_session():
         .enableHiveSupport() \
         .getOrCreate()
 
+def read_incremental_bronze(spark, table_name):
+    bronze_table = f"bronze.bronze_{table_name}"
+
+    last_watermark = get_watermark(
+        spark,
+        layer="silver",
+        table_name=table_name
+    )
+
+    df = spark.read.table(bronze_table)
+
+    if last_watermark is None:
+        print(f"[Silver] {table_name}: FIRST RUN")
+        return df, None
+
+    print(f"[Silver] {table_name}: Previous watermark = {last_watermark}")
+
+    df = df.filter(
+        col("ingest_at") > lit(last_watermark)
+    )
+
+    return df, last_watermark
 
 def clean_users(df: DataFrame) -> DataFrame:
+    df = df.select(
+        col('user_id'),
+        col('age'),
+        col('gender'),
+        col('country'),
+        col('city'),
+        col('signup_date'),
+        col('income_level'),
+        col('preferred_category'),
+        col('loyalty_tier')
+    )
     df_clean = df.na.drop(subset=["user_id"])
     return dedupe_by_key(df_clean, ["user_id"], order_column="signup_date", keep="latest")
 
 
 def clean_products(df: DataFrame) -> DataFrame:
+    df = df.select(
+        col('product_id'),
+        col('product_name'),
+        col('product_description'),
+        col('category'),
+        col('subcategory'),
+        col('brand'),
+        col('price'),
+        col('rating_avg'),
+        col('review_count'),
+        col('stock_quantity'),
+        col('date_added')
+    )
     # rating_avg/review_count được phép NULL — sản phẩm chưa có review, không ép na.drop toàn cột
     df_clean = df.na.drop(subset=["product_id", "product_name", "price"])
     return dedupe_by_key(df_clean, ["product_id"], order_column="date_added", keep="latest")
 
 
 def clean_sessions(df: DataFrame) -> DataFrame:
+    df = df.select(
+        col('session_id'),
+        col('user_id'),
+        col('start_time'),
+        col('device_type'),
+        col('referrer_source'),
+        col('is_converted')
+    )
     df_clean = df.na.drop(subset=["session_id", "user_id"])
     return dedupe_by_key(df_clean, ["session_id"], order_column="start_time", keep="latest")
 
 
 def clean_interactions(df: DataFrame) -> DataFrame:
+    df = df.select(
+        col('interaction_id'),
+        col('user_id'),
+        col('product_id'),
+        col('session_id'),
+        col('interaction_type'),
+        col('interaction_timestamp'),
+        col('dwell_time_ms')
+    )
     df_clean = df.na.drop(subset=["interaction_id", "user_id", "product_id", "session_id"])
     return dedupe_by_key(df_clean, ["interaction_id"], order_column="dwell_time_ms", keep="latest")
 
 
 def clean_purchases(df: DataFrame) -> DataFrame:
+    df = df.select(
+        col("purchase_id"), 
+        col("order_id"), 
+        col('user_id'),
+        col('product_id'),
+        col('session_id'),
+        col("interaction_id"), 
+        col("quantity"), 
+        col("unit_price"), 
+        col("total_amount"),
+        col('order_date')
+    )
     df_clean = df.na.drop(subset=["purchase_id", "order_id", "user_id", "product_id", "total_amount"])
     return dedupe_by_key(df_clean, ["purchase_id"], order_column="order_date", keep="latest")
 
 
 def clean_reviews(df: DataFrame, purchases_cleaned: DataFrame) -> DataFrame:
+    df = df.select(
+        col("review_id"), 
+        col('user_id'),
+        col('product_id'),
+        col("purchase_id"), 
+        col("rating"),
+        col("title"),
+        col("review_text"),
+        col("review_date")
+    )
     df_clean = df.na.drop(subset=["review_id", "user_id", "product_id", "rating"])
-    df_clean = dedupe_by_key(df_clean, ["review_id"], order_column="review_date", keep="latest")
+    return dedupe_by_key(df_clean, ["review_id"], order_column="review_date", keep="latest")
 
-    # purchase_id gốc bị trống nhiều -> khôi phục qua (user_id, product_id)
-    # Dedupe purchases trước theo cặp (user_id, product_id) để tránh fan-out nếu
-    # 1 user mua cùng sản phẩm nhiều lần (chỉ lấy purchase gần nhất để gán review)
-    purchases_latest_per_pair = dedupe_by_key(
-        purchases_cleaned.select("purchase_id", "user_id", "product_id", "order_date"),
-        key_columns=["user_id", "product_id"],
-        order_column="order_date",
-        keep="latest"
-    ).select(col("purchase_id").alias("recovered_purchase_id"), "user_id", "product_id")
+def process_table(
+    spark,
+    table_name,
+    clean_fn,
+    extra_arg=None,
+    max_loss_pct=15.0,
+    use_merge=False
+):
+    silver_table = f"silver.silver_{table_name}"
 
-    df_enriched = df_clean.join(purchases_latest_per_pair, on=["user_id", "product_id"], how="left")
-    df_enriched = df_enriched.withColumn(
-        "purchase_id", spark_coalesce(col("purchase_id"), col("recovered_purchase_id"))
-    ).drop("recovered_purchase_id")
+    print(f"\n========== SILVER: {table_name} ==========")
 
-    return df_enriched
+    df_raw, last_watermark = read_incremental_bronze(
+        spark,
+        table_name
+    )   
+    print(f"[Watermark] Previous: {last_watermark}")
 
-
-def process_table(spark, table_name, clean_fn, extra_arg=None, max_loss_pct=15.0):
-    bronze_table = f"bronze.bronze_{table_name}"
-    df_raw = spark.read.table(bronze_table)
+    # Không có dữ liệu mới
+    if df_raw.limit(1).count() == 0:
+        print(f"[Silver] {table_name}: No new data")
+        return None
 
     df_clean = clean_fn(df_raw, extra_arg) if extra_arg is not None else clean_fn(df_raw)
 
     validate_row_count(df_raw, df_clean, f"silver_{table_name}", max_loss_pct=max_loss_pct)
 
-    for rule_name, condition in SILVER_RULES:
+    rules = SILVER_RULES[table_name]
+    unique_keys = rules["unique_keys"]
+
+    for rule_name, condition_fn in rules["business_rules"].items():
         validate_business_rule(
             df=df_clean, 
             rule_name=rule_name, 
-            condition=condition, 
+            condition=condition_fn(df_clean), 
             step_name=f"silver_{table_name}", 
             max_violation_pct=1.0
         )
 
-    silver_table = f"silver.silver_{table_name}"
-    df_clean.write.format("delta").mode("overwrite").saveAsTable(silver_table)
+    # thêm metadata
+    ingest_time = spark.sql("SELECT current_timestamp()").first()[0]
+
+    df_clean = (
+            df_clean
+            .withColumn("ingest_at", lit(ingest_time)) # viết ingest time để spark trả về ngay mà không cần phải đợi action
+            .withColumn("source", lit("bronze"))
+        )
+
+    if not spark.catalog.tableExists(silver_table):
+    
+        df_clean.write \
+            .format("delta") \
+            .mode("overwrite") \
+            .saveAsTable(silver_table)
+    
+        print(f"[Silver] Created {silver_table}")
+
+    elif use_merge:
+        target = DeltaTable.forName(
+            spark,
+            silver_table
+        )
+
+        merge_condition = " AND ".join([f"tgt.{key} = src.{key}" for key in unique_keys])
+
+        (
+            target.alias("tgt")
+            .merge(df_clean.alias("src"), merge_condition)
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute()
+        )
+
+        print(f"[Silver] MERGE completed: {silver_table}")
+    else:
+        df_clean.write \
+            .format("delta") \
+            .mode("append") \
+            .saveAsTable(silver_table)
+
+        print(f"[Silver] APPEND completed: {silver_table}")
+        
+
+    new_watermark = df_raw.select(spark_max("ingest_at").alias("watermark_value")).first()["watermark_value"]
+
+    print(f"[Watermark] New: {new_watermark}")
+
+    insert_log(
+        spark=spark,
+        layer="silver",
+        table_name=table_name,
+        watermark_column="ingest_at",
+        watermark_value=str(new_watermark),
+        rundate=str(date.today())
+    )
+
     print(f"[Silver] {table_name}: {df_clean.count()} rows -> {silver_table}")
+
     return df_clean
 
 
@@ -130,16 +277,58 @@ def main():
     spark = create_spark_session()
     print("--- BẮT ĐẦU TRANSFORM SILVER ---")
 
-    process_table(spark, "users", clean_users, max_loss_pct=5.0)
-    process_table(spark, "products", clean_products, max_loss_pct=5.0)
-    process_table(spark, "sessions", clean_sessions, max_loss_pct=5.0)
-    # interactions: ngưỡng cao hơn vì có duplicate thật cần loại bỏ (đã ghi nhận ở validate_bronze)
-    process_table(spark, "interactions", clean_interactions, max_loss_pct=20.0)
-    purchases = process_table(spark, "purchases", clean_purchases, max_loss_pct=5.0)
-    process_table(spark, "reviews", clean_reviews, extra_arg=purchases, max_loss_pct=5.0)
+    process_table(
+        spark,
+        "users",
+        clean_users,
+        max_loss_pct=5.0,
+        use_merge=True
+    )
+
+    process_table(
+        spark,
+        "products",
+        clean_products,
+        max_loss_pct=5.0,
+        use_merge=True
+    )
+
+    process_table(
+        spark,
+        "sessions",
+        clean_sessions,
+        max_loss_pct=5.0,
+        use_merge=False
+    )
+
+    process_table(
+        spark,
+        "interactions",
+        clean_interactions,
+        max_loss_pct=20.0,
+        use_merge=False
+    )
+
+    purchases = process_table(
+        spark,
+        "purchases",
+        clean_purchases,
+        max_loss_pct=5.0,
+        use_merge=False
+    )
+
+    # Cẩn thận: purchases có thể None nếu hôm nay không có batch mới
+    if purchases is not None:
+        process_table(
+            spark,
+            "reviews",
+            clean_reviews,
+            extra_arg=purchases,
+            max_loss_pct=5.0,
+            use_merge=False
+        )
 
     spark.stop()
-
 
 if __name__ == "__main__":
     main()

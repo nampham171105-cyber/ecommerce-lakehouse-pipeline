@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from utils.validation import validate_schema, validate_minimum_row_count
-from utils.job_control import get_max_timestamp, insert_log
+from utils.job_control import get_watermark, insert_log
 from pyspark.sql.functions import *
 from datetime import date
 
@@ -76,7 +76,7 @@ def ingest_table(spark, table_name):
     table = BRONZE_RULES[table_name]
     watermark_column = table["watermark_column"]
 
-    last_watermark = get_max_timestamp(spark, "ecommerce",table_name)
+    last_watermark = get_watermark(spark, "bronze",table_name)
 
     print(f"[Watermark] Previous: {last_watermark}")
 
@@ -123,10 +123,21 @@ def ingest_table(spark, table_name):
     validate_schema(df, table["expected_columns"], bronze_table)
     # validate_minimum_row_count(df, table["min_rows"], bronze_table)
 
+    # thêm metadata
+    ingest_time = spark.sql("SELECT current_timestamp()").first()[0]
+
+    df = (
+        df
+        .withColumn("ingest_at", lit(ingest_time)) # viết ingest time để spark trả về ngay mà không cần phải đợi action
+        .withColumn("source", lit("postgresql"))
+    )
+
     if last_watermark is None:
         df.write.format("delta").mode("overwrite").saveAsTable(bronze_table)
+        print(f"[BRONZE] Created {bronze_table}")
     else:
         df.write.format("delta").mode("append").saveAsTable(bronze_table)
+        print(f"[BRONZE] APPEND completed: {bronze_table}")
     # df.write.format("delta").mode("overwrite").option("path", target_path).saveAsTable(table)
     
     print(f"[Bronze] Ingested table {table_name}: {df.count()} rows -> {bronze_table}")
@@ -139,7 +150,7 @@ def ingest_table(spark, table_name):
 
     insert_log(
         spark=spark,
-        schema_name="ecommerce",
+        layer="bronze",
         table_name=table_name,
         watermark_column=watermark_column,
         watermark_value=str(new_watermark),
