@@ -1,9 +1,11 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql import DataFrame
-from utils.job_control import get_watermark, insert_log
+from job_control import get_watermark, insert_log
 from delta.tables import DeltaTable
 from datetime import date
+import argparse
+
 
 def create_spark_session():
     return SparkSession.builder \
@@ -370,64 +372,78 @@ def write_gold_table(df, table_name):
         .saveAsTable(table_name)
     print(f"[Gold] {table_name}: {df.count()} rows")
 
+
+GOLD_CONFIG = {
+    "dim_product": {
+        "source_table_name": "products",
+        "build_fn": build_dim_product,
+        "write_mode": "merge_scd1",
+        "merge_key": ["product_id"],
+    },
+    "dim_session": {
+        "source_table_name": "sessions",
+        "build_fn": build_dim_session,
+        "write_mode": "append",
+        "merge_key": None,
+    },
+    "fact_interaction": {
+        "source_table_name": "interactions",
+        "build_fn": build_fact_interaction,
+        "write_mode": "append",
+        "merge_key": None,
+    },
+    "fact_purchase": {
+        "source_table_name": "purchases",
+        "build_fn": build_fact_purchase,
+        "write_mode": "append",
+        "merge_key": None,
+    },
+    "fact_review": {
+        "source_table_name": "reviews",
+        "build_fn": build_fact_review,
+        "write_mode": "append",
+        "merge_key": None,
+    },
+}
+
+# dim_user và dim_date xử lý đặc biệt, không nằm trong dict trên
+ALL_GOLD_TABLES = ["dim_user", "dim_date"] +  list(GOLD_CONFIG.keys())
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Build một bảng Gold")
+    parser.add_argument(
+        "--table",
+        required=True,
+        choices=ALL_GOLD_TABLES,
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    table_name = args.table
+
     spark = create_spark_session()
-    
-    print("--- BẮT ĐẦU BUILD GOLD ---")
-    
-    # ==== USER =====
-    build_dim_user_scd2(spark)
+    print(f"--- BẮT ĐẦU BUILD GOLD: {table_name} ---")
 
-    # ==== PRODUCT =====
-    build_table(
-        spark,
-        source_table_name="products",
-        gold_table_name="dim_product",
-        build_fn=build_dim_product,
-        write_mode="merge_scd1",
-        merge_key=["product_id"],
-    )
+    if table_name == "dim_user":
+        build_dim_user_scd2(spark)
 
-    # ==== DATE =====
-    dim_date = build_dim_date(spark)
-    write_gold_table(dim_date, "gold.dim_date")
+    elif table_name == "dim_date":
+        dim_date = build_dim_date(spark)
+        write_gold_table(dim_date, "gold.dim_date")
 
-    # ==== SESSION =====
-    build_table(
-        spark,
-        source_table_name="sessions",
-        gold_table_name="dim_session",
-        build_fn=build_dim_session,
-        write_mode="append",
-    )     
-
-    # ==== INTERACTION =====
-    build_table(
-        spark,
-        source_table_name="interactions",
-        gold_table_name="fact_interaction",
-        build_fn=build_fact_interaction,
-        write_mode="append",
-    )
-
-    # ==== PURCHASE =====
-    build_table(
-        spark,
-        source_table_name="purchases",
-        gold_table_name="fact_purchase",
-        build_fn=build_fact_purchase,
-        write_mode="append",
-    )
-
-    # ==== REVIEW =====
-    build_table(
-        spark,
-        source_table_name="reviews",
-        gold_table_name="fact_review",
-        build_fn=build_fact_review,
-        write_mode="append",
-    )
-
+    else:
+        config = GOLD_CONFIG[table_name]
+        build_table(
+            spark,
+            source_table_name=config["source_table_name"],
+            gold_table_name=table_name,
+            build_fn=config["build_fn"],
+            write_mode=config["write_mode"],
+            merge_key=config["merge_key"],
+        )
 
     spark.stop()
 

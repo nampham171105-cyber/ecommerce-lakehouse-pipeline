@@ -105,13 +105,6 @@ def validate_business_rule(df: DataFrame, rule_name: str, condition, step_name: 
         )
 
 
-def dedupe_exact(df: DataFrame, exclude_columns: list = None) -> DataFrame:
-    """Loại bỏ các dòng giống hệt nhau, bỏ qua cột ID sinh ngẫu nhiên (vd UUID)."""
-    exclude_columns = exclude_columns or []
-    compare_cols = [c for c in df.columns if c not in exclude_columns]
-    return df.dropDuplicates(compare_cols)
-
-
 def dedupe_by_key(df: DataFrame, key_columns: list, order_column: str, keep: str = "latest") -> DataFrame:
     """Giữ lại đúng 1 bản ghi cho mỗi key, chọn theo order_column (mới nhất/cũ nhất)."""
     order_expr = desc(order_column) if keep == "latest" else col(order_column)

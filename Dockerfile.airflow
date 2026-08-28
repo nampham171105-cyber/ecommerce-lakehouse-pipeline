@@ -1,0 +1,26 @@
+FROM my-spark:3.5.1-custom AS spark-stage
+
+FROM apache/airflow:2.9.3
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jre-headless \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /usr/local/lib \
+    && JAVA_BIN=$(readlink -f /usr/bin/java) \
+    && JAVA_DIR=$(dirname "$(dirname "$JAVA_BIN")") \
+    && ln -sfn "$JAVA_DIR" /usr/local/lib/jvm-17
+
+COPY --from=spark-stage /opt/spark /opt/spark
+
+ENV JAVA_HOME=/usr/local/lib/jvm-17
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$PATH:$SPARK_HOME/bin
+
+USER airflow
+
+RUN PIP_CONSTRAINT="" pip install --no-cache-dir \
+    pyspark==3.5.1 \
+    delta-spark==3.2.0 \
+    apache-airflow-providers-apache-spark==4.8.0

@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
-from utils.validation import validate_schema, validate_minimum_row_count
-from utils.job_control import get_watermark, insert_log
+import argparse
+from validation import validate_schema, validate_minimum_row_count
+from job_control import get_watermark, insert_log
 from pyspark.sql.functions import *
 from datetime import date
 
@@ -121,7 +122,7 @@ def ingest_table(spark, table_name):
             .load()
 
     validate_schema(df, table["expected_columns"], bronze_table)
-    # validate_minimum_row_count(df, table["min_rows"], bronze_table)
+    validate_minimum_row_count(df, table["min_rows"], bronze_table)
 
     # thêm metadata
     ingest_time = spark.sql("SELECT current_timestamp()").first()[0]
@@ -157,23 +158,29 @@ def ingest_table(spark, table_name):
         rundate=str(date.today())
     )
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Ingest một bảng từ PostgreSQL vào Bronze layer"
+    )
+    parser.add_argument(
+        "--table",
+        required=True,
+        choices=list(BRONZE_RULES.keys()),   # chỉ cho phép các bảng đã định nghĩa rule
+    )
+    return parser.parse_args()
+
 def main():
+    args = parse_args()
+    table_name = args.table
+
     spark = create_spark_session()
 
-    print("--- BẮT ĐẦU LOAD TỪ DATABASE ---")
-    tables = [
-        "users", 
-        "products", 
-        "sessions", 
-        "interactions", 
-        "purchases", 
-        "reviews"
-    ]
-    
-    for table in tables:
-        ingest_table(spark, table)
+    print(f"--- BẮT ĐẦU LOAD TỪ DATABASE: {table_name} ---")
 
-    spark.stop()
+    try:
+        ingest_table(spark, table_name)
+    finally:
+        spark.stop()
 
 if __name__ == "__main__":
     main()

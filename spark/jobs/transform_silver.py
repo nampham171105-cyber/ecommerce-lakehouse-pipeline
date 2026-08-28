@@ -2,8 +2,9 @@ from pyspark.sql import SparkSession, DataFrame
 from delta.tables import DeltaTable
 from datetime import date
 from pyspark.sql.functions import col, lit, max as spark_max, coalesce as spark_coalesce
-from utils.job_control import get_watermark, insert_log
-from utils.validation import validate_row_count, dedupe_exact, dedupe_by_key, validate_business_rule
+from job_control import get_watermark, insert_log
+from validation import validate_row_count, dedupe_by_key, validate_business_rule
+import argparse
 
 SILVER_RULES = {
     "users": {
@@ -158,7 +159,7 @@ def clean_purchases(df: DataFrame) -> DataFrame:
     return dedupe_by_key(df_clean, ["purchase_id"], order_column="order_date", keep="latest")
 
 
-def clean_reviews(df: DataFrame, purchases_cleaned: DataFrame) -> DataFrame:
+def clean_reviews(df: DataFrame) -> DataFrame:
     df = df.select(
         col("review_id"), 
         col('user_id'),
@@ -176,7 +177,6 @@ def process_table(
     spark,
     table_name,
     clean_fn,
-    extra_arg=None,
     max_loss_pct=15.0,
     use_merge=False
 ):
@@ -195,7 +195,7 @@ def process_table(
         print(f"[Silver] {table_name}: No new data")
         return None
 
-    df_clean = clean_fn(df_raw, extra_arg) if extra_arg is not None else clean_fn(df_raw)
+    df_clean = clean_fn(df_raw) 
 
     validate_row_count(df_raw, df_clean, f"silver_{table_name}", max_loss_pct=max_loss_pct)
 
@@ -272,63 +272,45 @@ def process_table(
 
     return df_clean
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Transform một bảng từ Bronze sang Silver"
+    )
+    parser.add_argument(
+        "--table",
+        required=True,
+        choices=list(SILVER_RULES.keys()),
+    )
+    return parser.parse_args()
+
 
 def main():
+    table_configs = {
+        "users":        {"clean_fn": clean_users,        "max_loss_pct": 5.0,  "use_merge": True},
+        "products":     {"clean_fn": clean_products,     "max_loss_pct": 5.0,  "use_merge": True},
+        "sessions":     {"clean_fn": clean_sessions,     "max_loss_pct": 5.0,  "use_merge": False},
+        "interactions": {"clean_fn": clean_interactions, "max_loss_pct": 20.0, "use_merge": False},
+        "purchases":    {"clean_fn": clean_purchases,    "max_loss_pct": 5.0,  "use_merge": False},
+        "reviews":      {"clean_fn": clean_reviews,      "max_loss_pct": 5.0,  "use_merge": False},
+    }
+
+    args = parse_args()
+    table_name = args.table
+    config = table_configs[table_name]
+
     spark = create_spark_session()
     print("--- BẮT ĐẦU TRANSFORM SILVER ---")
 
-    process_table(
-        spark,
-        "users",
-        clean_users,
-        max_loss_pct=5.0,
-        use_merge=True
-    )
-
-    process_table(
-        spark,
-        "products",
-        clean_products,
-        max_loss_pct=5.0,
-        use_merge=True
-    )
-
-    process_table(
-        spark,
-        "sessions",
-        clean_sessions,
-        max_loss_pct=5.0,
-        use_merge=False
-    )
-
-    process_table(
-        spark,
-        "interactions",
-        clean_interactions,
-        max_loss_pct=20.0,
-        use_merge=False
-    )
-
-    purchases = process_table(
-        spark,
-        "purchases",
-        clean_purchases,
-        max_loss_pct=5.0,
-        use_merge=False
-    )
-
-    # Cẩn thận: purchases có thể None nếu hôm nay không có batch mới
-    if purchases is not None:
+    try: 
         process_table(
             spark,
-            "reviews",
-            clean_reviews,
-            extra_arg=purchases,
-            max_loss_pct=5.0,
-            use_merge=False
+            table_name,
+            config["clean_fn"],
+            max_loss_pct=config["max_loss_pct"],
+            use_merge=config["use_merge"],
         )
-
-    spark.stop()
+    finally:
+        spark.stop()
 
 if __name__ == "__main__":
     main()

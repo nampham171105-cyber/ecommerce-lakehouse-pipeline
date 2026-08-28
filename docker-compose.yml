@@ -191,7 +191,9 @@ services:
       - airflow-db-data:/var/lib/postgresql/data
 
   airflow-init:
-    image: apache/airflow:2.9.3
+    build: 
+      context: .
+      dockerfile: Dockerfile.airflow
     container_name: airflow-init
     depends_on:
       - airflow-db
@@ -206,35 +208,43 @@ services:
       - spark-network
 
   airflow-webserver:
-    image: apache/airflow:2.9.3
+    build: 
+      context: .
+      dockerfile: Dockerfile.airflow
     container_name: airflow-webserver
     depends_on:
       - airflow-init
     environment:
+      - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@airflow-db:5432/airflow_db
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__WEBSERVER__SECRET_KEY=my_shared_secret_key_12345  # Thêm cái này để spark ghi log lên ui airflow
     ports:
       - "8090:8080"
     volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./spark/utils:/opt/spark/utils
       - ./airflow/dags:/opt/airflow/dags
-      - /var/run/docker.sock:/var/run/docker.sock # Câu lệnh giúp airflow điểu khiển các container khác(spark)
     command: webserver
     networks:
       - spark-network
 
   airflow-scheduler:
-    image: apache/airflow:2.9.3
+    build: 
+      context: .
+      dockerfile: Dockerfile.airflow
     container_name: airflow-scheduler
     depends_on:
       - airflow-init
     environment:
+      - AIRFLOW_CONN_SPARK_DEFAULT=spark://spark-master:7077
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@airflow-db:5432/airflow_db
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__WEBSERVER__SECRET_KEY=my_shared_secret_key_12345  # Thêm cái này để spark ghi log lên ui airflow
     volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./spark/utils:/opt/spark/utils
       - ./airflow/dags:/opt/airflow/dags
-      - /var/run/docker.sock:/var/run/docker.sock # Câu lệnh giúp airflow điểu khiển các container khác(spark)
     command: scheduler
     networks:
       - spark-network
