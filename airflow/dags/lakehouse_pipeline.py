@@ -19,6 +19,12 @@ def make_spark_task(task_id: str, script: str, table: str) -> SparkSubmitOperato
         task_id=task_id,
         application=f"{SPARK_JOBS_DIR}/{script}",
         conn_id=SPARK_CONN_ID,
+        conf={
+            "spark.cores.max": "1",               # Ép mỗi task chỉ dùng tối đa 1 core
+            "spark.executor.memory": "1g",        # Ép mỗi task dùng 1GB RAM
+            "spark.driver.host": "airflow-scheduler", # Chỉ đường cho Worker gọi về Driver
+            "spark.driver.bindAddress": "0.0.0.0"
+        },
         # Không truyền packages/conf — spark-defaults.conf trong image đã lo,
         # jar cũng đã có sẵn trong /opt/spark/jars qua Dockerfile.
         py_files=f"{SPARK_UTILS_DIR}/job_control.py,{SPARK_UTILS_DIR}/validation.py",
@@ -36,7 +42,7 @@ with DAG(
     schedule_interval=None,
     catchup=False,
     max_active_runs=1,
-    max_active_tasks=4,   # 2 worker x 2 core = 4 core khả dụng của cluster
+    max_active_tasks=2,   # 2 worker x 2 core = 4 core khả dụng của cluster
     tags=["lakehouse", "spark"],
 ) as dag:
 

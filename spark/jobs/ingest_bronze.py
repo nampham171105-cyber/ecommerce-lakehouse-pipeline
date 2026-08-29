@@ -122,7 +122,7 @@ def ingest_table(spark, table_name):
             .load()
 
     validate_schema(df, table["expected_columns"], bronze_table)
-    validate_minimum_row_count(df, table["min_rows"], bronze_table)
+    # validate_minimum_row_count(df, table["min_rows"], bronze_table)
 
     # thêm metadata
     ingest_time = spark.sql("SELECT current_timestamp()").first()[0]

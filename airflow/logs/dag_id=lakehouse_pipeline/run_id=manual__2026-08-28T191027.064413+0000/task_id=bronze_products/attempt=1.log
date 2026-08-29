@@ -1,0 +1,44 @@
+[2026-08-28T19:10:27.956+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-08-28T19:10:28.000+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: lakehouse_pipeline.bronze_products manual__2026-08-28T19:10:27.064413+00:00 [queued]>
+[2026-08-28T19:10:28.011+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: lakehouse_pipeline.bronze_products manual__2026-08-28T19:10:27.064413+00:00 [queued]>
+[2026-08-28T19:10:28.013+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 3
+[2026-08-28T19:10:28.033+0000] {taskinstance.py:2330} INFO - Executing <Task(SparkSubmitOperator): bronze_products> on 2026-08-28 19:10:27.064413+00:00
+[2026-08-28T19:10:28.039+0000] {standard_task_runner.py:64} INFO - Started process 272 to run task
+[2026-08-28T19:10:28.044+0000] {standard_task_runner.py:90} INFO - Running: ['airflow', 'tasks', 'run', 'lakehouse_pipeline', 'bronze_products', 'manual__2026-08-28T19:10:27.064413+00:00', '--job-id', '3', '--raw', '--subdir', 'DAGS_FOLDER/lakehouse_pipeline.py', '--cfg-path', '/tmp/tmpko4yzy2y']
+[2026-08-28T19:10:28.048+0000] {standard_task_runner.py:91} INFO - Job 3: Subtask bronze_products
+[2026-08-28T19:10:28.127+0000] {task_command.py:426} INFO - Running <TaskInstance: lakehouse_pipeline.bronze_products manual__2026-08-28T19:10:27.064413+00:00 [running]> on host d4c27690e5c8
+[2026-08-28T19:10:28.248+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='data_team' AIRFLOW_CTX_DAG_ID='lakehouse_pipeline' AIRFLOW_CTX_TASK_ID='bronze_products' AIRFLOW_CTX_EXECUTION_DATE='2026-08-28T19:10:27.064413+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-08-28T19:10:27.064413+00:00'
+[2026-08-28T19:10:28.248+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2026-08-28T19:10:28.299+0000] {spark_submit.py:271} INFO - Could not load connection string spark_default, defaulting to yarn
+[2026-08-28T19:10:28.300+0000] {spark_submit.py:401} INFO - Spark-Submit cmd: spark-submit --master yarn --conf spark.cores.max=1 --conf spark.executor.memory=1g --conf spark.driver.host=airflow-scheduler --conf spark.driver.bindAddress=0.0.0.0 --conf spark.yarn.appMasterEnv.PYTHONPATH=/opt/spark --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark /opt/spark/jobs/ingest_bronze.py --table products
+[2026-08-28T19:10:28.313+0000] {spark_submit.py:571} INFO - /opt/spark/bin/load-spark-env.sh: line 68: ps: command not found
+[2026-08-28T19:10:31.045+0000] {spark_submit.py:571} INFO - Exception in thread "main" org.apache.spark.SparkException: When running with master 'yarn' either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.
+[2026-08-28T19:10:31.046+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmitArguments.error(SparkSubmitArguments.scala:650)
+[2026-08-28T19:10:31.046+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmitArguments.validateSubmitArguments(SparkSubmitArguments.scala:281)
+[2026-08-28T19:10:31.049+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmitArguments.validateArguments(SparkSubmitArguments.scala:237)
+[2026-08-28T19:10:31.050+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmitArguments.<init>(SparkSubmitArguments.scala:122)
+[2026-08-28T19:10:31.050+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmit$$anon$2$$anon$3.<init>(SparkSubmit.scala:1103)
+[2026-08-28T19:10:31.051+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmit$$anon$2.parseArguments(SparkSubmit.scala:1103)
+[2026-08-28T19:10:31.052+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmit.doSubmit(SparkSubmit.scala:86)
+[2026-08-28T19:10:31.052+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmit$$anon$2.doSubmit(SparkSubmit.scala:1120)
+[2026-08-28T19:10:31.053+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmit$.main(SparkSubmit.scala:1129)
+[2026-08-28T19:10:31.053+0000] {spark_submit.py:571} INFO - at org.apache.spark.deploy.SparkSubmit.main(SparkSubmit.scala)
+[2026-08-28T19:10:31.098+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-08-28T19:10:31.112+0000] {taskinstance.py:2905} ERROR - Task failed with exception
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/models/taskinstance.py", line 465, in _execute_task
+    result = _execute_callable(context=context, **execute_callable_kwargs)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/models/taskinstance.py", line 432, in _execute_callable
+    return execute_callable(context=context, **execute_callable_kwargs)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/models/baseoperator.py", line 401, in wrapper
+    return func(self, *args, **kwargs)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/providers/apache/spark/operators/spark_submit.py", line 174, in execute
+    self._hook.submit(self.application)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/providers/apache/spark/hooks/spark_submit.py", line 502, in submit
+    raise AirflowException(
+airflow.exceptions.AirflowException: Cannot execute: spark-submit --master yarn --conf spark.cores.max=1 --conf spark.executor.memory=1g --conf spark.driver.host=airflow-scheduler --conf spark.driver.bindAddress=0.0.0.0 --conf spark.yarn.appMasterEnv.PYTHONPATH=/opt/spark --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark /opt/spark/jobs/ingest_bronze.py --table products. Error code is: 1.
+[2026-08-28T19:10:31.116+0000] {taskinstance.py:1206} INFO - Marking task as UP_FOR_RETRY. dag_id=lakehouse_pipeline, task_id=bronze_products, run_id=manual__2026-08-28T19:10:27.064413+00:00, execution_date=20260828T191027, start_date=20260828T191028, end_date=20260828T191031
+[2026-08-28T19:10:31.129+0000] {standard_task_runner.py:110} ERROR - Failed to execute job 3 for task bronze_products (Cannot execute: spark-submit --master yarn --conf spark.cores.max=1 --conf spark.executor.memory=1g --conf spark.driver.host=airflow-scheduler --conf spark.driver.bindAddress=0.0.0.0 --conf spark.yarn.appMasterEnv.PYTHONPATH=/opt/spark --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark /opt/spark/jobs/ingest_bronze.py --table products. Error code is: 1.; 272)
+[2026-08-28T19:10:31.160+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 1
+[2026-08-28T19:10:31.193+0000] {taskinstance.py:3503} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-08-28T19:10:31.195+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

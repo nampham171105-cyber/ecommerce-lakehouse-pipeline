@@ -1,5 +1,4 @@
 FROM apache/spark:3.5.1
-
 USER root
 
 RUN curl -L -o /opt/spark/jars/hadoop-aws-3.3.4.jar \
@@ -18,5 +17,4 @@ COPY conf/log4j2.properties /opt/spark/conf/log4j2.properties
 
 RUN mkdir -p /tmp/.ivy2 && chmod -R 777 /tmp/.ivy2
 
-USER spark 
-# sử dụng quyền root cao nhất để tải xong rồi quay lại user để tránh hacker 
+USER spark

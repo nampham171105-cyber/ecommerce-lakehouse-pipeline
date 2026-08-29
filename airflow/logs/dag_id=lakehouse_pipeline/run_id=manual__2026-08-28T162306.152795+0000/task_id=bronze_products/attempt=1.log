@@ -1,0 +1,59 @@
+[2026-08-28T16:23:07.021+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-08-28T16:23:07.066+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: lakehouse_pipeline.bronze_products manual__2026-08-28T16:23:06.152795+00:00 [queued]>
+[2026-08-28T16:23:07.075+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: lakehouse_pipeline.bronze_products manual__2026-08-28T16:23:06.152795+00:00 [queued]>
+[2026-08-28T16:23:07.076+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 3
+[2026-08-28T16:23:07.100+0000] {taskinstance.py:2330} INFO - Executing <Task(SparkSubmitOperator): bronze_products> on 2026-08-28 16:23:06.152795+00:00
+[2026-08-28T16:23:07.108+0000] {standard_task_runner.py:64} INFO - Started process 186 to run task
+[2026-08-28T16:23:07.113+0000] {standard_task_runner.py:90} INFO - Running: ['airflow', 'tasks', 'run', 'lakehouse_pipeline', 'bronze_products', 'manual__2026-08-28T16:23:06.152795+00:00', '--job-id', '67', '--raw', '--subdir', 'DAGS_FOLDER/lakehouse_pipeline.py', '--cfg-path', '/tmp/tmp548pzydb']
+[2026-08-28T16:23:07.116+0000] {standard_task_runner.py:91} INFO - Job 67: Subtask bronze_products
+[2026-08-28T16:23:07.210+0000] {task_command.py:426} INFO - Running <TaskInstance: lakehouse_pipeline.bronze_products manual__2026-08-28T16:23:06.152795+00:00 [running]> on host 4bc193de6f25
+[2026-08-28T16:23:07.336+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='data_team' AIRFLOW_CTX_DAG_ID='lakehouse_pipeline' AIRFLOW_CTX_TASK_ID='bronze_products' AIRFLOW_CTX_EXECUTION_DATE='2026-08-28T16:23:06.152795+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-08-28T16:23:06.152795+00:00'
+[2026-08-28T16:23:07.339+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2026-08-28T16:23:07.384+0000] {base.py:84} INFO - Using connection ID 'spark_default' for task execution.
+[2026-08-28T16:23:07.385+0000] {spark_submit.py:401} INFO - Spark-Submit cmd: spark-submit --master spark://spark-master:7077 --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark --deploy-mode client /opt/spark/jobs/ingest_bronze.py --table products
+[2026-08-28T16:23:07.395+0000] {spark_submit.py:571} INFO - /opt/spark/bin/load-spark-env.sh: line 68: ps: command not found
+[2026-08-28T16:23:15.105+0000] {spark_submit.py:571} INFO - 26/08/28 16:23:15 WARN Utils: Service 'SparkUI' could not bind on port 4040. Attempting port 4041.
+[2026-08-28T16:23:15.124+0000] {spark_submit.py:571} INFO - 26/08/28 16:23:15 WARN Utils: Service 'SparkUI' could not bind on port 4041. Attempting port 4042.
+[2026-08-28T16:23:15.125+0000] {spark_submit.py:571} INFO - 26/08/28 16:23:15 WARN Utils: Service 'SparkUI' could not bind on port 4042. Attempting port 4043.
+[2026-08-28T16:23:17.690+0000] {spark_submit.py:571} INFO - --- BẮT ĐẦU LOAD TỪ DATABASE: products ---
+[2026-08-28T16:23:54.612+0000] {spark_submit.py:571} INFO - 26/08/28 16:23:54 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:24:09.614+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:09 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:24:24.611+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:24 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:24:39.610+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:39 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:24:54.611+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:54 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:25:09.610+0000] {spark_submit.py:571} INFO - 26/08/28 16:25:09 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:25:24.610+0000] {spark_submit.py:571} INFO - 26/08/28 16:25:24 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:25:33.514+0000] {spark_submit.py:571} INFO - 26/08/28 16:25:33 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+[2026-08-28T16:25:49.124+0000] {spark_submit.py:571} INFO - [Watermark] Previous: 2026-05-27 00:00:00
+[2026-08-28T16:25:49.125+0000] {spark_submit.py:571} INFO - [Load] Incremental load
+[2026-08-28T16:25:49.458+0000] {spark_submit.py:571} INFO - [VALIDATION] bronze.bronze_products: schema OK (11 cột)
+[2026-08-28T16:25:50.027+0000] {spark_submit.py:571} INFO - [VALIDATION] bronze.bronze_products: 0 rows (ngưỡng tối thiểu: 1)
+[2026-08-28T16:25:50.482+0000] {spark_submit.py:571} INFO - Traceback (most recent call last):
+[2026-08-28T16:25:50.483+0000] {spark_submit.py:571} INFO - File "/opt/spark/jobs/ingest_bronze.py", line 186, in <module>
+[2026-08-28T16:25:50.485+0000] {spark_submit.py:571} INFO - main()
+[2026-08-28T16:25:50.489+0000] {spark_submit.py:571} INFO - File "/opt/spark/jobs/ingest_bronze.py", line 181, in main
+[2026-08-28T16:25:50.491+0000] {spark_submit.py:571} INFO - ingest_table(spark, table_name)
+[2026-08-28T16:25:50.492+0000] {spark_submit.py:571} INFO - File "/opt/spark/jobs/ingest_bronze.py", line 125, in ingest_table
+[2026-08-28T16:25:50.492+0000] {spark_submit.py:571} INFO - validate_minimum_row_count(df, table["min_rows"], bronze_table)
+[2026-08-28T16:25:50.493+0000] {spark_submit.py:571} INFO - File "/tmp/localPyFiles-41e820df-b844-41b4-9335-8bbdb25bd489/validation.py", line 22, in validate_minimum_row_count
+[2026-08-28T16:25:50.494+0000] {spark_submit.py:571} INFO - raise ValueError(
+[2026-08-28T16:25:50.494+0000] {spark_submit.py:571} INFO - ValueError: [VALIDATION FAILED] bronze.bronze_products: chỉ có 0 dòng, thấp hơn ngưỡng tối thiểu 1 — nghi ngờ ingest bị thiếu
+[2026-08-28T16:25:50.764+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-08-28T16:25:51.455+0000] {taskinstance.py:2905} ERROR - Task failed with exception
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/models/taskinstance.py", line 465, in _execute_task
+    result = _execute_callable(context=context, **execute_callable_kwargs)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/models/taskinstance.py", line 432, in _execute_callable
+    return execute_callable(context=context, **execute_callable_kwargs)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/models/baseoperator.py", line 401, in wrapper
+    return func(self, *args, **kwargs)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/providers/apache/spark/operators/spark_submit.py", line 174, in execute
+    self._hook.submit(self.application)
+  File "/home/airflow/.local/lib/python3.10/site-packages/airflow/providers/apache/spark/hooks/spark_submit.py", line 502, in submit
+    raise AirflowException(
+airflow.exceptions.AirflowException: Cannot execute: spark-submit --master spark://spark-master:7077 --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark --deploy-mode client /opt/spark/jobs/ingest_bronze.py --table products. Error code is: 1.
+[2026-08-28T16:25:51.555+0000] {taskinstance.py:1206} INFO - Marking task as UP_FOR_RETRY. dag_id=lakehouse_pipeline, task_id=bronze_products, run_id=manual__2026-08-28T16:23:06.152795+00:00, execution_date=20260828T162306, start_date=20260828T162307, end_date=20260828T162551
+[2026-08-28T16:25:51.809+0000] {standard_task_runner.py:110} ERROR - Failed to execute job 67 for task bronze_products (Cannot execute: spark-submit --master spark://spark-master:7077 --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark --deploy-mode client /opt/spark/jobs/ingest_bronze.py --table products. Error code is: 1.; 186)
+[2026-08-28T16:25:51.884+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 1
+[2026-08-28T16:25:52.722+0000] {taskinstance.py:3503} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-08-28T16:25:52.730+0000] {local_task_job_runner.py:222} INFO - ::endgroup::

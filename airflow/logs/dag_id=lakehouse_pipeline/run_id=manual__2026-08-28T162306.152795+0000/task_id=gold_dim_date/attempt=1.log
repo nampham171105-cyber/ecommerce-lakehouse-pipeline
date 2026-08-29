@@ -1,0 +1,147 @@
+[2026-08-28T16:23:07.024+0000] {local_task_job_runner.py:120} INFO - ::group::Pre task execution logs
+[2026-08-28T16:23:07.065+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: lakehouse_pipeline.gold_dim_date manual__2026-08-28T16:23:06.152795+00:00 [queued]>
+[2026-08-28T16:23:07.074+0000] {taskinstance.py:2076} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: lakehouse_pipeline.gold_dim_date manual__2026-08-28T16:23:06.152795+00:00 [queued]>
+[2026-08-28T16:23:07.075+0000] {taskinstance.py:2306} INFO - Starting attempt 1 of 3
+[2026-08-28T16:23:07.093+0000] {taskinstance.py:2330} INFO - Executing <Task(SparkSubmitOperator): gold_dim_date> on 2026-08-28 16:23:06.152795+00:00
+[2026-08-28T16:23:07.100+0000] {standard_task_runner.py:64} INFO - Started process 185 to run task
+[2026-08-28T16:23:07.105+0000] {standard_task_runner.py:90} INFO - Running: ['airflow', 'tasks', 'run', 'lakehouse_pipeline', 'gold_dim_date', 'manual__2026-08-28T16:23:06.152795+00:00', '--job-id', '65', '--raw', '--subdir', 'DAGS_FOLDER/lakehouse_pipeline.py', '--cfg-path', '/tmp/tmpyqck_5b2']
+[2026-08-28T16:23:07.109+0000] {standard_task_runner.py:91} INFO - Job 65: Subtask gold_dim_date
+[2026-08-28T16:23:07.205+0000] {task_command.py:426} INFO - Running <TaskInstance: lakehouse_pipeline.gold_dim_date manual__2026-08-28T16:23:06.152795+00:00 [running]> on host 4bc193de6f25
+[2026-08-28T16:23:07.331+0000] {taskinstance.py:2648} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='data_team' AIRFLOW_CTX_DAG_ID='lakehouse_pipeline' AIRFLOW_CTX_TASK_ID='gold_dim_date' AIRFLOW_CTX_EXECUTION_DATE='2026-08-28T16:23:06.152795+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-08-28T16:23:06.152795+00:00'
+[2026-08-28T16:23:07.339+0000] {taskinstance.py:430} INFO - ::endgroup::
+[2026-08-28T16:23:07.382+0000] {base.py:84} INFO - Using connection ID 'spark_default' for task execution.
+[2026-08-28T16:23:07.384+0000] {spark_submit.py:401} INFO - Spark-Submit cmd: spark-submit --master spark://spark-master:7077 --py-files /opt/spark/utils/job_control.py,/opt/spark/utils/validation.py --name arrow-spark --deploy-mode client /opt/spark/jobs/build_gold.py --table dim_date
+[2026-08-28T16:23:07.397+0000] {spark_submit.py:571} INFO - /opt/spark/bin/load-spark-env.sh: line 68: ps: command not found
+[2026-08-28T16:23:17.694+0000] {spark_submit.py:571} INFO - --- BẮT ĐẦU BUILD GOLD: dim_date ---
+[2026-08-28T16:23:26.089+0000] {spark_submit.py:571} INFO - 
+[2026-08-28T16:23:26.097+0000] {spark_submit.py:571} INFO - ========== GOLD: gold.dim_date ==========
+[2026-08-28T16:23:54.682+0000] {spark_submit.py:571} INFO - 26/08/28 16:23:54 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:24:09.670+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:09 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+[2026-08-28T16:24:17.771+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:17 WARN SparkStringUtils: Truncated the string representation of a plan since it was too large. This behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.
+[2026-08-28T16:24:42.942+0000] {spark_submit.py:571} INFO - 26/08/28 16:24:42 WARN HiveExternalCatalog: Could not alter schema of table `gold`.`dim_date` in a Hive compatible way. Updating Hive metastore in Spark SQL specific format.
+[2026-08-28T16:24:42.946+0000] {spark_submit.py:571} INFO - java.lang.reflect.InvocationTargetException: null
+[2026-08-28T16:24:42.948+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[?:?]
+[2026-08-28T16:24:42.949+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[?:?]
+[2026-08-28T16:24:42.949+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[?:?]
+[2026-08-28T16:24:42.951+0000] {spark_submit.py:571} INFO - at java.lang.reflect.Method.invoke(Method.java:569) ~[?:?]
+[2026-08-28T16:24:42.952+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.Shim_v2_1.alterTable(HiveShim.scala:1611) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.953+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.HiveClientImpl.$anonfun$alterTableDataSchema$1(HiveClientImpl.scala:633) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.957+0000] {spark_submit.py:571} INFO - at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.java:23) ~[scala-library-2.12.18.jar:?]
+[2026-08-28T16:24:42.957+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.HiveClientImpl.$anonfun$withHiveState$1(HiveClientImpl.scala:303) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.958+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.HiveClientImpl.liftedTree1$1(HiveClientImpl.scala:234) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.959+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.HiveClientImpl.retryLocked(HiveClientImpl.scala:233) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.960+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.HiveClientImpl.withHiveState(HiveClientImpl.scala:283) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.961+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.client.HiveClientImpl.alterTableDataSchema(HiveClientImpl.scala:614) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.963+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.HiveExternalCatalog.$anonfun$alterTableDataSchema$1(HiveExternalCatalog.scala:713) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.963+0000] {spark_submit.py:571} INFO - at scala.runtime.java8.JFunction0$mcV$sp.apply(JFunction0$mcV$sp.java:23) ~[scala-library-2.12.18.jar:?]
+[2026-08-28T16:24:42.964+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.HiveExternalCatalog.withClient(HiveExternalCatalog.scala:99) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.964+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.hive.HiveExternalCatalog.alterTableDataSchema(HiveExternalCatalog.scala:699) ~[spark-hive_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.965+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener.alterTableDataSchema(ExternalCatalogWithListener.scala:124) ~[spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.965+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.hooks.UpdateCatalog$.org$apache$spark$sql$delta$hooks$UpdateCatalog$$replaceTable(UpdateCatalog.scala:334) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.969+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.hooks.UpdateCatalog.updateSchema(UpdateCatalog.scala:236) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.970+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.updateCatalog(CreateDeltaTableCommand.scala:579) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.971+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.runPostCommitUpdates(CreateDeltaTableCommand.scala:194) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.971+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.handleCommit(CreateDeltaTableCommand.scala:174) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.972+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.$anonfun$run$2(CreateDeltaTableCommand.scala:110) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.973+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordFrameProfile(DeltaLogging.scala:168) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.973+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordFrameProfile$(DeltaLogging.scala:166) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.975+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.recordFrameProfile(CreateDeltaTableCommand.scala:57) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.975+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.$anonfun$recordDeltaOperationInternal$1(DeltaLogging.scala:136) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.976+0000] {spark_submit.py:571} INFO - at com.databricks.spark.util.DatabricksLogging.recordOperation(DatabricksLogging.scala:128) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.976+0000] {spark_submit.py:571} INFO - at com.databricks.spark.util.DatabricksLogging.recordOperation$(DatabricksLogging.scala:117) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.977+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.recordOperation(CreateDeltaTableCommand.scala:57) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.978+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordDeltaOperationInternal(DeltaLogging.scala:135) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.979+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordDeltaOperation(DeltaLogging.scala:125) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.982+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordDeltaOperation$(DeltaLogging.scala:115) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.982+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.recordDeltaOperation(CreateDeltaTableCommand.scala:57) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.983+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.commands.CreateDeltaTableCommand.run(CreateDeltaTableCommand.scala:110) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.984+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.catalog.DeltaCatalog.$anonfun$createDeltaTable$1(DeltaCatalog.scala:184) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.985+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordFrameProfile(DeltaLogging.scala:168) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.986+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordFrameProfile$(DeltaLogging.scala:166) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.987+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.catalog.DeltaCatalog.recordFrameProfile(DeltaCatalog.scala:65) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.987+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.catalog.DeltaCatalog.org$apache$spark$sql$delta$catalog$DeltaCatalog$$createDeltaTable(DeltaCatalog.scala:95) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.988+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.catalog.DeltaCatalog$StagedDeltaTableV2.$anonfun$commitStagedChanges$1(DeltaCatalog.scala:545) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.989+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordFrameProfile(DeltaLogging.scala:168) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.990+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.metering.DeltaLogging.recordFrameProfile$(DeltaLogging.scala:166) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.991+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.catalog.DeltaCatalog.recordFrameProfile(DeltaCatalog.scala:65) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.991+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.delta.catalog.DeltaCatalog$StagedDeltaTableV2.commitStagedChanges(DeltaCatalog.scala:507) ~[delta-spark_2.12-3.2.0.jar:3.2.0]
+[2026-08-28T16:24:42.992+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.V2CreateTableAsSelectBaseExec.$anonfun$writeToTable$1(WriteToDataSourceV2Exec.scala:580) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.992+0000] {spark_submit.py:571} INFO - at org.apache.spark.util.Utils$.tryWithSafeFinallyAndFailureCallbacks(Utils.scala:1397) ~[spark-core_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.993+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.V2CreateTableAsSelectBaseExec.writeToTable(WriteToDataSourceV2Exec.scala:573) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.996+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.V2CreateTableAsSelectBaseExec.writeToTable$(WriteToDataSourceV2Exec.scala:567) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.997+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.AtomicReplaceTableAsSelectExec.writeToTable(WriteToDataSourceV2Exec.scala:183) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:42.999+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.AtomicReplaceTableAsSelectExec.run(WriteToDataSourceV2Exec.scala:216) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.000+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.V2CommandExec.result$lzycompute(V2CommandExec.scala:43) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.001+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.V2CommandExec.result(V2CommandExec.scala:43) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.001+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.datasources.v2.V2CommandExec.executeCollect(V2CommandExec.scala:49) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.002+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution$$anonfun$eagerlyExecuteCommands$1.$anonfun$applyOrElse$1(QueryExecution.scala:107) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.003+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.SQLExecution$.$anonfun$withNewExecutionId$6(SQLExecution.scala:125) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.003+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.SQLExecution$.withSQLConfPropagated(SQLExecution.scala:201) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.005+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.SQLExecution$.$anonfun$withNewExecutionId$1(SQLExecution.scala:108) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.007+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.SparkSession.withActive(SparkSession.scala:900) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.008+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.SQLExecution$.withNewExecutionId(SQLExecution.scala:66) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.009+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution$$anonfun$eagerlyExecuteCommands$1.applyOrElse(QueryExecution.scala:107) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.011+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution$$anonfun$eagerlyExecuteCommands$1.applyOrElse(QueryExecution.scala:98) ~[spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.012+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.trees.TreeNode.$anonfun$transformDownWithPruning$1(TreeNode.scala:461) ~[spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.012+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.trees.CurrentOrigin$.withOrigin(origin.scala:76) [spark-sql-api_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.013+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.trees.TreeNode.transformDownWithPruning(TreeNode.scala:461) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.014+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.plans.logical.LogicalPlan.org$apache$spark$sql$catalyst$plans$logical$AnalysisHelper$$super$transformDownWithPruning(LogicalPlan.scala:32) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.015+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.plans.logical.AnalysisHelper.transformDownWithPruning(AnalysisHelper.scala:267) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.016+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.plans.logical.AnalysisHelper.transformDownWithPruning$(AnalysisHelper.scala:263) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.017+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.plans.logical.LogicalPlan.transformDownWithPruning(LogicalPlan.scala:32) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.017+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.plans.logical.LogicalPlan.transformDownWithPruning(LogicalPlan.scala:32) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.018+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.catalyst.trees.TreeNode.transformDown(TreeNode.scala:437) [spark-catalyst_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.019+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution.eagerlyExecuteCommands(QueryExecution.scala:98) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.019+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution.commandExecuted$lzycompute(QueryExecution.scala:85) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.020+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution.commandExecuted(QueryExecution.scala:83) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.021+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.execution.QueryExecution.assertCommandExecuted(QueryExecution.scala:142) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.021+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.DataFrameWriter.runCommand(DataFrameWriter.scala:859) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.022+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.DataFrameWriter.saveAsTable(DataFrameWriter.scala:634) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.023+0000] {spark_submit.py:571} INFO - at org.apache.spark.sql.DataFrameWriter.saveAsTable(DataFrameWriter.scala:568) [spark-sql_2.12-3.5.1.jar:3.5.1]
+[2026-08-28T16:24:43.023+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[?:?]
+[2026-08-28T16:24:43.024+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[?:?]
+[2026-08-28T16:24:43.025+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[?:?]
+[2026-08-28T16:24:43.025+0000] {spark_submit.py:571} INFO - at java.lang.reflect.Method.invoke(Method.java:569) ~[?:?]
+[2026-08-28T16:24:43.026+0000] {spark_submit.py:571} INFO - at py4j.reflection.MethodInvoker.invoke(MethodInvoker.java:244) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.028+0000] {spark_submit.py:571} INFO - at py4j.reflection.ReflectionEngine.invoke(ReflectionEngine.java:374) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.029+0000] {spark_submit.py:571} INFO - at py4j.Gateway.invoke(Gateway.java:282) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.029+0000] {spark_submit.py:571} INFO - at py4j.commands.AbstractCommand.invokeMethod(AbstractCommand.java:132) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.030+0000] {spark_submit.py:571} INFO - at py4j.commands.CallCommand.execute(CallCommand.java:79) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.031+0000] {spark_submit.py:571} INFO - at py4j.ClientServerConnection.waitForCommands(ClientServerConnection.java:182) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.032+0000] {spark_submit.py:571} INFO - at py4j.ClientServerConnection.run(ClientServerConnection.java:106) [py4j-0.10.9.7.jar:?]
+[2026-08-28T16:24:43.032+0000] {spark_submit.py:571} INFO - at java.lang.Thread.run(Thread.java:840) [?:?]
+[2026-08-28T16:24:43.033+0000] {spark_submit.py:571} INFO - Caused by: org.apache.hadoop.hive.ql.metadata.HiveException: Unable to alter table. The following columns have types incompatible with the existing columns in their respective positions :
+[2026-08-28T16:24:43.034+0000] {spark_submit.py:571} INFO - date_sk
+[2026-08-28T16:24:43.037+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.ql.metadata.Hive.alterTable(Hive.java:634) ~[hive-exec-2.3.9-core.jar:2.3.9]
+[2026-08-28T16:24:43.038+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.ql.metadata.Hive.alterTable(Hive.java:612) ~[hive-exec-2.3.9-core.jar:2.3.9]
+[2026-08-28T16:24:43.040+0000] {spark_submit.py:571} INFO - ... 90 more
+[2026-08-28T16:24:43.041+0000] {spark_submit.py:571} INFO - Caused by: org.apache.hadoop.hive.metastore.api.InvalidOperationException: The following columns have types incompatible with the existing columns in their respective positions :
+[2026-08-28T16:24:43.041+0000] {spark_submit.py:571} INFO - date_sk
+[2026-08-28T16:24:43.043+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore$alter_table_with_environment_context_result$alter_table_with_environment_context_resultStandardScheme.read(ThriftHiveMetastore.java:59744) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.045+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore$alter_table_with_environment_context_result$alter_table_with_environment_context_resultStandardScheme.read(ThriftHiveMetastore.java:59730) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.046+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore$alter_table_with_environment_context_result.read(ThriftHiveMetastore.java:59672) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.047+0000] {spark_submit.py:571} INFO - at org.apache.thrift.TServiceClient.receiveBase(TServiceClient.java:88) ~[libthrift-0.12.0.jar:0.12.0]
+[2026-08-28T16:24:43.048+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore$Client.recv_alter_table_with_environment_context(ThriftHiveMetastore.java:1693) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.049+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore$Client.alter_table_with_environment_context(ThriftHiveMetastore.java:1677) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.050+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.HiveMetaStoreClient.alter_table_with_environmentContext(HiveMetaStoreClient.java:373) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.051+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClient.alter_table_with_environmentContext(SessionHiveMetaStoreClient.java:322) ~[hive-exec-2.3.9-core.jar:2.3.9]
+[2026-08-28T16:24:43.052+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[?:?]
+[2026-08-28T16:24:43.053+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[?:?]
+[2026-08-28T16:24:43.053+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[?:?]
+[2026-08-28T16:24:43.054+0000] {spark_submit.py:571} INFO - at java.lang.reflect.Method.invoke(Method.java:569) ~[?:?]
+[2026-08-28T16:24:43.055+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.RetryingMetaStoreClient.invoke(RetryingMetaStoreClient.java:173) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.055+0000] {spark_submit.py:571} INFO - at jdk.proxy2.$Proxy40.alter_table_with_environmentContext(Unknown Source) ~[?:?]
+[2026-08-28T16:24:43.056+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[?:?]
+[2026-08-28T16:24:43.056+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[?:?]
+[2026-08-28T16:24:43.057+0000] {spark_submit.py:571} INFO - at jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[?:?]
+[2026-08-28T16:24:43.057+0000] {spark_submit.py:571} INFO - at java.lang.reflect.Method.invoke(Method.java:569) ~[?:?]
+[2026-08-28T16:24:43.058+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.metastore.HiveMetaStoreClient$SynchronizedHandler.invoke(HiveMetaStoreClient.java:2327) ~[hive-metastore-2.3.9.jar:2.3.9]
+[2026-08-28T16:24:43.058+0000] {spark_submit.py:571} INFO - at jdk.proxy2.$Proxy40.alter_table_with_environmentContext(Unknown Source) ~[?:?]
+[2026-08-28T16:24:43.059+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.ql.metadata.Hive.alterTable(Hive.java:630) ~[hive-exec-2.3.9-core.jar:2.3.9]
+[2026-08-28T16:24:43.059+0000] {spark_submit.py:571} INFO - at org.apache.hadoop.hive.ql.metadata.Hive.alterTable(Hive.java:612) ~[hive-exec-2.3.9-core.jar:2.3.9]
+[2026-08-28T16:24:43.060+0000] {spark_submit.py:571} INFO - ... 90 more
+[2026-08-28T16:24:47.490+0000] {spark_submit.py:571} INFO - [Gold] gold.dim_date: 1462 rows
+[2026-08-28T16:24:48.127+0000] {taskinstance.py:441} INFO - ::group::Post task execution logs
+[2026-08-28T16:24:48.847+0000] {taskinstance.py:1206} INFO - Marking task as SUCCESS. dag_id=lakehouse_pipeline, task_id=gold_dim_date, run_id=manual__2026-08-28T16:23:06.152795+00:00, execution_date=20260828T162306, start_date=20260828T162307, end_date=20260828T162448
+[2026-08-28T16:24:49.415+0000] {local_task_job_runner.py:243} INFO - Task exited with return code 0
+[2026-08-28T16:24:49.563+0000] {local_task_job_runner.py:222} INFO - ::endgroup::
