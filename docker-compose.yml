@@ -249,6 +249,22 @@ services:
     networks:
       - spark-network
 
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+    container_name: superset
+    depends_on:
+      - trino
+    environment:
+      - SUPERSET_SECRET_KEY=my_shared_secret_key_12345
+    ports:
+      - "8088:8088"
+    networks:
+      - spark-network
+    volumes:
+      - superset-home:/app/superset_home
+
 networks:
   spark-network:
     driver: bridge
@@ -258,3 +274,4 @@ volumes:
   minio-data:
   postgres-data:
   hive-metastore-data:
+  superset-home:

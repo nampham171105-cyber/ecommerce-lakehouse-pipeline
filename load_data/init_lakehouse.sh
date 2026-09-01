@@ -11,6 +11,7 @@ CREATE SCHEMA IF NOT EXISTS delta.bronze WITH (location = 's3a://lakehouse/bronz
 CREATE SCHEMA IF NOT EXISTS delta.silver WITH (location = 's3a://lakehouse/silver/');
 CREATE SCHEMA IF NOT EXISTS delta.gold WITH (location = 's3a://lakehouse/gold/');
 CREATE SCHEMA IF NOT EXISTS delta.control WITH (location = 's3a://lakehouse/control/');
+CREATE SCHEMA IF NOT EXISTS delta.mart WITH (location = 's3a://lakehouse/mart/');
 
 CREATE TABLE IF NOT EXISTS delta.control.job_control (
     layer VARCHAR,

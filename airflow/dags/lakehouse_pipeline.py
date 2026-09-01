@@ -6,6 +6,11 @@ SPARK_CONN_ID = "spark_default"
 SPARK_JOBS_DIR = "/opt/spark/jobs"
 SPARK_UTILS_DIR = "/opt/spark/utils"
 
+BRONZE_PRIORITY = 400
+SILVER_PRIORITY = 300
+GOLD_PRIORITY = 200
+MART_PRIORITY = 100
+
 default_args = {
     "owner": "data_team",
     "depends_on_past": False,
@@ -14,11 +19,13 @@ default_args = {
 }
 
 
-def make_spark_task(task_id: str, script: str, table: str) -> SparkSubmitOperator:
+def make_spark_task(task_id: str, script: str, table: str, priority_weight) -> SparkSubmitOperator:
     return SparkSubmitOperator(
         task_id=task_id,
         application=f"{SPARK_JOBS_DIR}/{script}",
         conn_id=SPARK_CONN_ID,
+        priority_weight=priority_weight,
+        weight_rule="absolute",
         conf={
             "spark.cores.max": "1",               # Ép mỗi task chỉ dùng tối đa 1 core
             "spark.executor.memory": "1g",        # Ép mỗi task dùng 1GB RAM
@@ -48,26 +55,33 @@ with DAG(
 
     TABLES = ["users", "products", "sessions", "interactions", "purchases", "reviews"]
 
-    bronze_tasks = {t: make_spark_task(f"bronze_{t}", "ingest_bronze.py", t) for t in TABLES}
-    silver_tasks = {t: make_spark_task(f"silver_{t}", "transform_silver.py", t) for t in TABLES}
+    bronze_tasks = {t: make_spark_task(f"bronze_{t}", "ingest_bronze.py", t, BRONZE_PRIORITY) for t in TABLES}
+    silver_tasks = {t: make_spark_task(f"silver_{t}", "transform_silver.py", t, SILVER_PRIORITY) for t in TABLES}
 
     for t in TABLES:
         bronze_tasks[t] >> silver_tasks[t]
 
-    gold_dim_user    = make_spark_task("gold_dim_user", "build_gold.py", "dim_user")
-    gold_dim_product = make_spark_task("gold_dim_product", "build_gold.py", "dim_product")
-    gold_dim_session = make_spark_task("gold_dim_session", "build_gold.py", "dim_session")
-    gold_dim_date    = make_spark_task("gold_dim_date", "build_gold.py", "dim_date")
+    gold_dim_user    = make_spark_task("gold_dim_user", "build_gold.py", "dim_user", GOLD_PRIORITY)
+    gold_dim_product = make_spark_task("gold_dim_product", "build_gold.py", "dim_product", GOLD_PRIORITY)
+    gold_dim_session = make_spark_task("gold_dim_session", "build_gold.py", "dim_session", GOLD_PRIORITY)
+    gold_dim_date    = make_spark_task("gold_dim_date", "build_gold.py", "dim_date", GOLD_PRIORITY)
 
     silver_tasks["users"]    >> gold_dim_user
     silver_tasks["products"] >> gold_dim_product
     silver_tasks["sessions"] >> gold_dim_session
     # gold_dim_date: không phụ thuộc Silver nào
 
-    gold_fact_interaction = make_spark_task("gold_fact_interaction", "build_gold.py", "fact_interaction")
-    gold_fact_purchase    = make_spark_task("gold_fact_purchase", "build_gold.py", "fact_purchase")
-    gold_fact_review      = make_spark_task("gold_fact_review", "build_gold.py", "fact_review")
+    gold_fact_interaction = make_spark_task("gold_fact_interaction", "build_gold.py", "fact_interaction", GOLD_PRIORITY)
+    gold_fact_purchase    = make_spark_task("gold_fact_purchase", "build_gold.py", "fact_purchase", GOLD_PRIORITY)
+    gold_fact_review      = make_spark_task("gold_fact_review", "build_gold.py", "fact_review", GOLD_PRIORITY)
 
     [gold_dim_user, gold_dim_product, gold_dim_session, gold_dim_date] >> gold_fact_interaction
     [gold_dim_user, gold_dim_product, gold_dim_session, gold_dim_date] >> gold_fact_purchase
     [gold_dim_user, gold_dim_product, gold_dim_date] >> gold_fact_review
+
+    mart_customer_360 = make_spark_task("mart_customer_360", "build_mart.py", "customer_360", MART_PRIORITY)
+    mart_sales_daily = make_spark_task("mart_sales_daily", "build_mart.py", "sales_daily", MART_PRIORITY)
+    mart_product_performance = make_spark_task("mart_product_performance", "build_mart.py", "product_performance", MART_PRIORITY)
+    [gold_dim_user, gold_fact_purchase, gold_fact_interaction, gold_fact_review] >> mart_customer_360
+    [gold_dim_date, gold_fact_purchase] >> mart_sales_daily
+    [gold_dim_product, gold_fact_purchase, gold_fact_interaction, gold_fact_review] >> mart_product_performance

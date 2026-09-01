@@ -1,0 +1,21 @@
+FROM apache/superset:latest
+
+USER root
+
+# Driver để Superset kết nối tới Trino qua SQLAlchemy
+# QUAN TRỌNG: apache/superset dùng venv dựng bởi `uv`, venv này KHÔNG có
+# sẵn binary `pip` bên trong (/app/.venv/bin/pip not found).
+# Giải pháp: dùng pip hệ thống nhưng ép cài thẳng vào site-packages của venv
+# bằng --target, để Python trong venv (đang chạy Superset) vẫn thấy được package.
+RUN pip install --no-cache-dir --target=/app/.venv/lib/python3.10/site-packages \
+    trino \
+    sqlalchemy-trino \
+    psycopg2-binary
+
+# Script khởi tạo: tạo admin user, migrate DB, load ví dụ (tuỳ chọn)
+COPY load_data/init-superset.sh /app/init-superset.sh
+RUN chmod +x /app/init-superset.sh
+
+USER superset
+
+ENTRYPOINT ["/app/init-superset.sh"]
