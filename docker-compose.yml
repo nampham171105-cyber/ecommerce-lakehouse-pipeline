@@ -171,16 +171,6 @@ services:
       - ./load_data:/load_data
     networks:
       - spark-network
-  
-  # metabase:
-  #   image: metabase/metabase:v0.50.8
-  #   container_name: metabase
-  #   ports:
-  #     - "3000:3000"
-  #   networks:
-  #     - spark-network
-  #   depends_on:
-  #     - trino
 
   airflow-db:
     image: postgres:15

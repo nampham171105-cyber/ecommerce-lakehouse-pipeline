@@ -73,6 +73,13 @@ BRONZE_RULES = {
 
 def ingest_table(spark, table_name):
 
+    run_id = (
+        f"bronze_{table_name}_"
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    )
+
+    started_at = datetime.now()
+
     bronze_table = f"bronze.bronze_{table_name}"
     table = BRONZE_RULES[table_name]
     watermark_column = table["watermark_column"]
@@ -121,6 +128,8 @@ def ingest_table(spark, table_name):
             .option("driver", "org.postgresql.Driver") \
             .load()
 
+    
+
     validate_schema(df, table["expected_columns"], bronze_table)
     # validate_minimum_row_count(df, table["min_rows"], bronze_table)
 
@@ -157,6 +166,26 @@ def ingest_table(spark, table_name):
         watermark_value=str(new_watermark),
         rundate=str(date.today())
     )
+
+    finished_at = datetime.now()
+
+    write_audit_log(
+        spark=spark,
+        run_id=run_id,
+        layer="bronze",
+        table_name=table_name,
+        status="SUCCESS",
+        started_at=started_at,
+        finished_at=finished_at,
+        input_rows=input_rows,
+        output_rows=output_rows,
+        rejected_rows=rejected_rows,
+        watermark_column=watermark_column,
+        watermark_value=new_watermark,
+        error_message=None
+        )
+
+    print(f"[AUDIT] SUCCESS "f"run_id={run_id}"
 
 def parse_args():
     parser = argparse.ArgumentParser(

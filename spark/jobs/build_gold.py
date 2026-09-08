@@ -233,10 +233,10 @@ def build_fact_interaction(spark, df: DataFrame) -> DataFrame:
 
     fact_interaction = (
         df
-        .join(dim_user, on="user_id", how="inner")
-        .join(dim_product, on="product_id", how="inner")
-        .join(dim_session, on="session_id", how="inner")
-        .join(dim_date, to_date(col("interaction_timestamp")) == col("date"), how="inner")
+        .join(dim_user, on="user_id", how="left")
+        .join(dim_product, on="product_id", how="left")
+        .join(dim_session, on="session_id", how="left")
+        .join(broadcast(dim_date), to_date(col("interaction_timestamp")) == col("date"), how="left")
     )
     return fact_interaction.select(
         col('interaction_id'),
@@ -257,10 +257,10 @@ def build_fact_purchase(spark, df: DataFrame) -> DataFrame:
 
     fact_purchase = (
         df
-        .join(dim_user, on="user_id", how="inner")
-        .join(dim_product, on="product_id", how="inner")
+        .join(dim_user, on="user_id", how="left")
+        .join(dim_product, on="product_id", how="left")
         .join(dim_session, on="session_id", how="left")
-        .join(dim_date, to_date(col("order_date")) == col("date"), how="inner")
+        .join(broadcast(dim_date), to_date(col("order_date")) == col("date"), how="left")
     )
     return fact_purchase.select(
         col("purchase_id"), 
@@ -282,9 +282,9 @@ def build_fact_review(spark, df: DataFrame) -> DataFrame:
     dim_date = spark.read.table("gold.dim_date").select("date_sk", "date")
     fact_review = (
         df
-        .join(dim_user, on="user_id", how="inner")
-        .join(dim_product, on="product_id", how="inner")
-        .join(dim_date, to_date(col("review_date")) == col("date"), how="inner")
+        .join(dim_user, on="user_id", how="left")
+        .join(dim_product, on="product_id", how="left")
+        .join(broadcast(dim_date), to_date(col("review_date")) == col("date"), how="left")
     )
     return fact_review.select(
         col("review_id"), 
