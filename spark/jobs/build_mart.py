@@ -1,11 +1,17 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import countDistinct
 from pyspark.sql.functions import *
+from job_control import generate_run_id, insert_quality_metric, insert_failed_records, insert_audit
+from datetime import datetime, date
 import argparse
+import builtins
 
 
 def create_spark_session():
     return SparkSession.builder.appName("BuildCustomer360").enableHiveSupport().getOrCreate()
+
+
+# ---------------- BUILD FUNCTIONS (giữ nguyên logic gốc) ----------------
 
 def build_customer_360(spark):
     print("\n========== BUILD CUSTOMER 360 ==========")
@@ -64,10 +70,11 @@ def build_customer_360(spark):
     customer_360 = (
         customer_360
         .withColumn("source", lit("gold"))
-        .withColumn("ingest_at", current_timestamp())   
+        .withColumn("ingest_at", current_timestamp())
     )
 
     return customer_360
+
 
 def build_product_performance(spark):
     print("\n========== BUILD PRODUCT PERFORMANCE ==========")
@@ -124,19 +131,18 @@ def build_product_performance(spark):
         product_performance
         .withColumn(
             "revenue_per_order",
-            when(col("total_orders") > 0, col("total_revenue") / col("total_orders"))
-            .otherwise(lit(0))
+            when(col("total_orders") > 0, col("total_revenue") / col("total_orders")).otherwise(lit(0))
         )
         .withColumn(
             "revenue_per_unit",
-            when(col("units_sold") > 0, col("total_revenue") / col("units_sold"))
-            .otherwise(lit(0))
+            when(col("units_sold") > 0, col("total_revenue") / col("units_sold")).otherwise(lit(0))
         )
         .withColumn("source", lit("gold"))
         .withColumn("ingest_at", current_timestamp())
     )
 
     return product_performance
+
 
 def build_sales_daily(spark):
     print("\n========== BUILD SALES DAILY ==========")
@@ -165,267 +171,194 @@ def build_sales_daily(spark):
 
     return sales_daily
 
-def validate_customer_360(df, spark):
+
+# ---------------- VALIDATE FUNCTIONS (ghi quality_metrics + quarantine) ----------------
+
+def _log_check(spark, run_id, table_name, check_name, metric_value, passed, rundate):
+    insert_quality_metric(
+        spark, run_id=run_id, layer="mart", table_name=table_name,
+        check_name=check_name, metric_value=metric_value, passed=passed, rundate=rundate
+    )
+
+
+def validate_customer_360(spark, run_id, df, rundate):
     print("\n========== DATA QUALITY: CUSTOMER 360 ==========")
+    table_name = "customer_360"
 
     # 1. Grain: 1 row = 1 customer
     total_rows = df.count()
     distinct_users = df.select("user_sk").distinct().count()
-
+    grain_diff = total_rows - distinct_users
     print(f"[DQ] Total rows: {total_rows}")
     print(f"[DQ] Distinct users: {distinct_users}")
-
-    if total_rows != distinct_users:
+    _log_check(spark, run_id, table_name, "grain_duplicate_user_sk", grain_diff, grain_diff == 0, rundate)
+    if grain_diff != 0:
         raise ValueError("Customer 360 grain FAILED: duplicate user_sk")
 
     # 2. Coverage: tất cả current customers phải xuất hiện
     current_users = (
         spark.read.table("gold.dim_user")
         .filter(col("is_current") == True)
-        .select("user_sk")
-        .distinct()
-        .count()
+        .select("user_sk").distinct().count()
     )
-
     print(f"[DQ] Current users in Gold: {current_users}")
-
+    coverage_diff = builtins.abs(total_rows - current_users)
+    _log_check(spark, run_id, table_name, "coverage_vs_dim_user", coverage_diff, total_rows == current_users, rundate)
     if total_rows != current_users:
-        raise ValueError(
-            f"Customer 360 coverage FAILED: "
-            f"Mart={total_rows}, Gold={current_users}"
-        )
+        raise ValueError(f"Customer 360 coverage FAILED: Mart={total_rows}, Gold={current_users}")
 
     # 3. Reconciliation: total spend
     fact_purchase = spark.read.table("gold.fact_purchase")
-
-    mart_spend = df.selectExpr(
-        "COALESCE(SUM(total_spend), 0) AS value"
-    ).first()["value"]
-
-    gold_spend = fact_purchase.selectExpr(
-        "COALESCE(SUM(total_amount), 0) AS value"
-    ).first()["value"]
-
+    mart_spend = df.selectExpr("COALESCE(SUM(total_spend), 0) AS value").first()["value"]
+    gold_spend = fact_purchase.selectExpr("COALESCE(SUM(total_amount), 0) AS value").first()["value"]
     print(f"[DQ] Mart total_spend: {mart_spend}")
     print(f"[DQ] Gold total_amount: {gold_spend}")
-
+    _log_check(spark, run_id, table_name, "spend_reconciliation_diff", mart_spend - gold_spend, mart_spend == gold_spend, rundate)
     if mart_spend != gold_spend:
-        raise ValueError(
-            f"Customer 360 spend reconciliation FAILED: "
-            f"Mart={mart_spend}, Gold={gold_spend}"
-        )
+        raise ValueError(f"Customer 360 spend reconciliation FAILED: Mart={mart_spend}, Gold={gold_spend}")
 
     # 4. Reconciliation: total items
-    mart_items = df.selectExpr(
-        "COALESCE(SUM(total_items), 0) AS value"
-    ).first()["value"]
-
-    gold_items = fact_purchase.selectExpr(
-        "COALESCE(SUM(quantity), 0) AS value"
-    ).first()["value"]
-
+    mart_items = df.selectExpr("COALESCE(SUM(total_items), 0) AS value").first()["value"]
+    gold_items = fact_purchase.selectExpr("COALESCE(SUM(quantity), 0) AS value").first()["value"]
     print(f"[DQ] Mart total_items: {mart_items}")
     print(f"[DQ] Gold quantity: {gold_items}")
-
+    _log_check(spark, run_id, table_name, "items_reconciliation_diff", mart_items - gold_items, mart_items == gold_items, rundate)
     if mart_items != gold_items:
-        raise ValueError(
-            f"Customer 360 items reconciliation FAILED: "
-            f"Mart={mart_items}, Gold={gold_items}"
-        )
+        raise ValueError(f"Customer 360 items reconciliation FAILED: Mart={mart_items}, Gold={gold_items}")
 
-    # 5. Metric consistency
-    invalid_orders = df.filter(
-        col("total_orders") > col("total_items")
-    ).count()
-
+    # 5. Metric consistency: total_orders không được lớn hơn total_items — quarantine dòng vi phạm
+    invalid_df = df.filter(col("total_orders") > col("total_items"))
+    invalid_orders = invalid_df.count()
+    _log_check(spark, run_id, table_name, "metric_logic_orders_gt_items", invalid_orders, invalid_orders == 0, rundate)
     if invalid_orders > 0:
-        raise ValueError(
-            "Customer 360 metric logic FAILED: "
-            "total_orders > total_items"
+        insert_failed_records(
+            spark, run_id=run_id, layer="mart", table_name=table_name,
+            df_rejected=invalid_df, key_columns=["user_sk"],
+            failure_reason="total_orders_gt_total_items", rundate=rundate
         )
+        raise ValueError("Customer 360 metric logic FAILED: total_orders > total_items")
 
     print("[DQ] Customer 360: PASSED")
 
-def validate_product_performance(df, spark):
+
+def validate_product_performance(spark, run_id, df, rundate):
     print("\n========== DATA QUALITY: PRODUCT PERFORMANCE ==========")
+    table_name = "product_performance"
 
     # 1. Grain: 1 row = 1 product
     total_rows = df.count()
-
-    distinct_products = (
-        df.select("product_sk")
-        .distinct()
-        .count()
-    )
-
+    distinct_products = df.select("product_sk").distinct().count()
+    grain_diff = total_rows - distinct_products
     print(f"[DQ] Total rows: {total_rows}")
     print(f"[DQ] Distinct products: {distinct_products}")
+    _log_check(spark, run_id, table_name, "grain_duplicate_product_sk", grain_diff, grain_diff == 0, rundate)
+    if grain_diff != 0:
+        raise ValueError("Product Performance grain FAILED: duplicate product_sk")
 
-    if total_rows != distinct_products:
-        raise ValueError(
-            "Product Performance grain FAILED: duplicate product_sk"
-        )
-
-    # 2. Coverage: tất cả product trong Gold phải xuất hiện
-    gold_products = (
-        spark.read.table("gold.dim_product")
-        .select("product_sk")
-        .distinct()
-        .count()
-    )
-
+    # 2. Coverage
+    gold_products = spark.read.table("gold.dim_product").select("product_sk").distinct().count()
     print(f"[DQ] Products in Gold: {gold_products}")
-
+    coverage_diff = builtins.abs(total_rows - gold_products)
+    _log_check(spark, run_id, table_name, "coverage_vs_dim_product", coverage_diff, total_rows == gold_products, rundate)
     if total_rows != gold_products:
-        raise ValueError(
-            f"Product Performance coverage FAILED: "
-            f"Mart={total_rows}, Gold={gold_products}"
-        )
+        raise ValueError(f"Product Performance coverage FAILED: Mart={total_rows}, Gold={gold_products}")
 
     # 3. Revenue reconciliation
-    fact_purchase = spark.read.table(
-        "gold.fact_purchase"
-    )
-
-    mart_revenue = df.selectExpr(
-        "COALESCE(SUM(total_revenue), 0) AS value"
-    ).first()["value"]
-
-    gold_revenue = fact_purchase.selectExpr(
-        "COALESCE(SUM(total_amount), 0) AS value"
-    ).first()["value"]
-
+    fact_purchase = spark.read.table("gold.fact_purchase")
+    mart_revenue = df.selectExpr("COALESCE(SUM(total_revenue), 0) AS value").first()["value"]
+    gold_revenue = fact_purchase.selectExpr("COALESCE(SUM(total_amount), 0) AS value").first()["value"]
     print(f"[DQ] Mart revenue: {mart_revenue}")
     print(f"[DQ] Gold revenue: {gold_revenue}")
-
+    _log_check(spark, run_id, table_name, "revenue_reconciliation_diff", mart_revenue - gold_revenue, mart_revenue == gold_revenue, rundate)
     if mart_revenue != gold_revenue:
-        raise ValueError(
-            f"Product revenue reconciliation FAILED: "
-            f"Mart={mart_revenue}, Gold={gold_revenue}"
-        )
+        raise ValueError(f"Product revenue reconciliation FAILED: Mart={mart_revenue}, Gold={gold_revenue}")
 
     # 4. Units reconciliation
-    mart_units = df.selectExpr(
-        "COALESCE(SUM(units_sold), 0) AS value"
-    ).first()["value"]
-
-    gold_units = fact_purchase.selectExpr(
-        "COALESCE(SUM(quantity), 0) AS value"
-    ).first()["value"]
-
+    mart_units = df.selectExpr("COALESCE(SUM(units_sold), 0) AS value").first()["value"]
+    gold_units = fact_purchase.selectExpr("COALESCE(SUM(quantity), 0) AS value").first()["value"]
     print(f"[DQ] Mart units: {mart_units}")
     print(f"[DQ] Gold units: {gold_units}")
-
+    _log_check(spark, run_id, table_name, "units_reconciliation_diff", mart_units - gold_units, mart_units == gold_units, rundate)
     if mart_units != gold_units:
-        raise ValueError(
-            f"Product units reconciliation FAILED: "
-            f"Mart={mart_units}, Gold={gold_units}"
-        )
+        raise ValueError(f"Product units reconciliation FAILED: Mart={mart_units}, Gold={gold_units}")
 
-    # 5. Metric consistency
-    invalid_customers = df.filter(
-        col("unique_customers") > col("total_orders")
-    ).count()
-
+    # 5. Metric consistency — quarantine dòng vi phạm
+    invalid_df = df.filter(col("unique_customers") > col("total_orders"))
+    invalid_customers = invalid_df.count()
+    _log_check(spark, run_id, table_name, "metric_logic_customers_gt_orders", invalid_customers, invalid_customers == 0, rundate)
     if invalid_customers > 0:
-        raise ValueError(
-            "Product Performance metric logic FAILED: "
-            "unique_customers > total_orders"
+        insert_failed_records(
+            spark, run_id=run_id, layer="mart", table_name=table_name,
+            df_rejected=invalid_df, key_columns=["product_sk"],
+            failure_reason="unique_customers_gt_total_orders", rundate=rundate
         )
+        raise ValueError("Product Performance metric logic FAILED: unique_customers > total_orders")
 
-    # 6. Derived metric consistency
-    invalid_revenue_per_unit = df.filter(
-        (col("units_sold") > 0) &
-        (
-            col("revenue_per_unit") !=
-            col("total_revenue") / col("units_sold")
-        )
-    ).count()
-
+    # 6. Derived metric consistency — quarantine dòng vi phạm
+    invalid_rev_df = df.filter(
+        (col("units_sold") > 0) & (col("revenue_per_unit") != col("total_revenue") / col("units_sold"))
+    )
+    invalid_revenue_per_unit = invalid_rev_df.count()
+    _log_check(spark, run_id, table_name, "derived_revenue_per_unit_mismatch", invalid_revenue_per_unit, invalid_revenue_per_unit == 0, rundate)
     if invalid_revenue_per_unit > 0:
-        raise ValueError(
-            "Product Performance revenue_per_unit FAILED"
+        insert_failed_records(
+            spark, run_id=run_id, layer="mart", table_name=table_name,
+            df_rejected=invalid_rev_df, key_columns=["product_sk"],
+            failure_reason="revenue_per_unit_mismatch", rundate=rundate
         )
+        raise ValueError("Product Performance revenue_per_unit FAILED")
 
     print("[DQ] Product Performance: PASSED")
 
-def validate_sales_daily(df, spark):
+
+def validate_sales_daily(spark, run_id, df, rundate):
     print("\n========== DATA QUALITY: SALES DAILY ==========")
+    table_name = "sales_daily"
 
     # 1. Grain
     total_rows = df.count()
     distinct_dates = df.select("date").distinct().count()
-
+    grain_diff = total_rows - distinct_dates
     print(f"[DQ] Total rows: {total_rows}")
     print(f"[DQ] Distinct dates: {distinct_dates}")
-
-    if total_rows != distinct_dates:
-        raise ValueError(
-            "Sales Daily grain FAILED: duplicate date"
-        )
+    _log_check(spark, run_id, table_name, "grain_duplicate_date", grain_diff, grain_diff == 0, rundate)
+    if grain_diff != 0:
+        raise ValueError("Sales Daily grain FAILED: duplicate date")
 
     # 2. Coverage
-    fact_purchase = spark.read.table(
-        "gold.fact_purchase"
-    )
-
+    fact_purchase = spark.read.table("gold.fact_purchase")
     gold_dates = (
-        fact_purchase
-        .join(
-            spark.read.table("gold.dim_date"),
-            "date_sk",
-            "inner"
-        )
-        .select("date")
-        .distinct()
-        .count()
+        fact_purchase.join(spark.read.table("gold.dim_date"), "date_sk", "inner")
+        .select("date").distinct().count()
     )
-
     print(f"[DQ] Dates in Gold: {gold_dates}")
-
+    coverage_diff = builtins.abs(total_rows - gold_dates)
+    _log_check(spark, run_id, table_name, "coverage_vs_fact_purchase", coverage_diff, total_rows == gold_dates, rundate)
     if total_rows != gold_dates:
-        raise ValueError(
-            f"Sales Daily coverage FAILED: "
-            f"Mart={total_rows}, Gold={gold_dates}"
-        )
+        raise ValueError(f"Sales Daily coverage FAILED: Mart={total_rows}, Gold={gold_dates}")
 
     # 3. Revenue reconciliation
-    mart_revenue = df.selectExpr(
-        "COALESCE(SUM(total_revenue), 0) AS value"
-    ).first()["value"]
-
-    gold_revenue = fact_purchase.selectExpr(
-        "COALESCE(SUM(total_amount), 0) AS value"
-    ).first()["value"]
-
+    mart_revenue = df.selectExpr("COALESCE(SUM(total_revenue), 0) AS value").first()["value"]
+    gold_revenue = fact_purchase.selectExpr("COALESCE(SUM(total_amount), 0) AS value").first()["value"]
     print(f"[DQ] Mart revenue: {mart_revenue}")
     print(f"[DQ] Gold revenue: {gold_revenue}")
-
+    _log_check(spark, run_id, table_name, "revenue_reconciliation_diff", mart_revenue - gold_revenue, mart_revenue == gold_revenue, rundate)
     if mart_revenue != gold_revenue:
-        raise ValueError(
-            f"Sales revenue reconciliation FAILED: "
-            f"Mart={mart_revenue}, Gold={gold_revenue}"
-        )
+        raise ValueError(f"Sales revenue reconciliation FAILED: Mart={mart_revenue}, Gold={gold_revenue}")
 
     # 4. Quantity reconciliation
-    mart_items = df.selectExpr(
-        "COALESCE(SUM(total_items), 0) AS value"
-    ).first()["value"]
-
-    gold_items = fact_purchase.selectExpr(
-        "COALESCE(SUM(quantity), 0) AS value"
-    ).first()["value"]
-
+    mart_items = df.selectExpr("COALESCE(SUM(total_items), 0) AS value").first()["value"]
+    gold_items = fact_purchase.selectExpr("COALESCE(SUM(quantity), 0) AS value").first()["value"]
     print(f"[DQ] Mart items: {mart_items}")
     print(f"[DQ] Gold items: {gold_items}")
-
+    _log_check(spark, run_id, table_name, "quantity_reconciliation_diff", mart_items - gold_items, mart_items == gold_items, rundate)
     if mart_items != gold_items:
-        raise ValueError(
-            f"Sales quantity reconciliation FAILED: "
-            f"Mart={mart_items}, Gold={gold_items}"
-        )
+        raise ValueError(f"Sales quantity reconciliation FAILED: Mart={mart_items}, Gold={gold_items}")
 
     print("[DQ] Sales Daily: PASSED")
+
+
+# ---------------- DISPATCH / WRITE ----------------
 
 def build_mart(spark, table_name):
     if table_name == "customer_360":
@@ -437,15 +370,17 @@ def build_mart(spark, table_name):
     else:
         raise ValueError(f"Unsupported mart table: {table_name}")
 
-def validate_mart(spark, df, table_name):
+
+def validate_mart(spark, run_id, df, table_name, rundate):
     if table_name == "customer_360":
-        validate_customer_360(df, spark)
+        validate_customer_360(spark, run_id, df, rundate)
     elif table_name == "product_performance":
-        validate_product_performance(df, spark)
+        validate_product_performance(spark, run_id, df, rundate)
     elif table_name == "sales_daily":
-        validate_sales_daily(df, spark)
+        validate_sales_daily(spark, run_id, df, rundate)
     else:
         raise ValueError(f"Unsupported mart table: {table_name}")
+
 
 def write_mart(df, table_name):
     target_table = f"mart.{table_name}"
@@ -453,31 +388,61 @@ def write_mart(df, table_name):
     df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(target_table)
     print(f"[Mart] {target_table}: {df.count()} rows")
 
+
 ALL_MART_TABLES = ["customer_360", "product_performance", "sales_daily"]
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build một bảng Mart")
-    parser.add_argument(
-        "--table",
-        required=True,
-        choices=ALL_MART_TABLES,
-    )
+    parser.add_argument("--table", required=True, choices=ALL_MART_TABLES)
     return parser.parse_args()
 
-def main():
 
+def main():
     args = parse_args()
     table_name = args.table
+    layer = "mart"
+
+    run_id = generate_run_id(layer, table_name)
+    started_at = datetime.now()
+    rundate = str(date.today())
+
     spark = create_spark_session()
+    row_count = 0
+
     try:
         df = build_mart(spark, table_name)
 
-        validate_mart(spark, df, table_name)
+        # Validate TRƯỚC khi ghi — mart chỉ được cập nhật nếu dữ liệu đã reconcile đúng với Gold.
+        # Mọi check ở đây là BLOCKING theo thiết kế gốc: sai lệch số liệu ở mart là lỗi nghiêm trọng,
+        # không nên âm thầm ghi đè dashboard bằng số liệu sai.
+        validate_mart(spark, run_id, df, table_name, rundate)
 
         write_mart(df, table_name)
+        row_count = df.count()
+
+        finished_at = datetime.now()
+        insert_audit(
+            spark=spark, run_id=run_id, layer=layer, table_name=table_name,
+            status="PASS", started_at=started_at, finished_at=finished_at,
+            input_rows=row_count, output_rows=row_count, rejected_rows=0, rundate=rundate,
+        )
+        print(f"[AUDIT] SUCCESS run_id={run_id}")
+
+    except Exception as e:
+        finished_at = datetime.now()
+        insert_audit(
+            spark=spark, run_id=run_id, layer=layer, table_name=table_name,
+            status="FAIL", started_at=started_at, finished_at=finished_at,
+            input_rows=row_count, output_rows=0, rejected_rows=None,
+            error_message=str(e)[:2000], rundate=rundate,
+        )
+        print(f"[AUDIT] FAILED run_id={run_id}: {e}")
+        raise
 
     finally:
         spark.stop()
+
 
 if __name__ == "__main__":
     main()
