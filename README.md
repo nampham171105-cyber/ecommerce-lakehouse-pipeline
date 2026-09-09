@@ -1,12 +1,13 @@
 # E-Commerce Data Lakehouse — Tích hợp Data Quality Framework
 
-Một lakehouse dạng medallion (**Bronze → Silver → Gold → Mart**) chạy trên **Delta Lake**, điều phối bằng **Apache Airflow**, truy vấn qua **Trino**, và trực quan hoá bằng **Superset** — với một framework kiểm soát chất lượng dữ liệu (data quality) được thiết kế xuyên suốt từng layer, thay vì chỉ chắp vá thêm vào sau cùng.
+Thiết kế 1 data lakehouse sử dụng kiến trúc medallion (**Bronze → Silver → Gold → Mart**) chạy trên **Delta Lake**, điều phối bằng **Apache Airflow**, truy vấn qua **Trino**, và trực quan hoá bằng **Superset** — với một framework kiểm soát chất lượng dữ liệu (data quality) được thiết kế xuyên suốt từng layer, thay vì chỉ chắp vá thêm vào sau cùng.
 
 ## Vì sao làm dự án này
 
-Đa số pipeline dữ liệu trong portfolio dừng lại ở "extract, transform, load". Dự án này đặt thêm một câu hỏi khó hơn: **làm sao biết được dữ liệu sau khi load vào là đúng?** Mỗi layer ở đây không chỉ ghi dữ liệu, mà còn ghi lại *bằng chứng* — cái gì đã được kiểm tra, cái gì pass, cái gì bị loại và vì sao — để không có con số sai nào âm thầm lọt lên dashboard.
+Đa số pipeline dữ liệu trong portfolio dừng lại ở "extract, transform, load". Dự án này đặt thêm một câu hỏi khó hơn: **làm sao biết được dữ liệu sau khi load vào là đúng?** Mỗi layer ở đây không chỉ ghi dữ liệu, mà còn ghi lại bằng chứng — cái gì đã được kiểm tra, cái gì pass, cái gì bị loại và vì sao — để không có con số sai nào âm thầm lọt lên dashboard.
 
 ## Kiến trúc
+<img width="963" height="694" alt="image" src="https://github.com/user-attachments/assets/827c7866-4c9e-4d52-93bc-17131b39e87c" />
 
 ```
 PostgreSQL (OLTP)
@@ -57,20 +58,28 @@ Thay vì chỉ viết `if` kiểm tra rồi cho job crash, mỗi bước validat
 
 1. **Tính ra 1 metric cụ thể** (% mất dữ liệu, % vi phạm rule, % orphan, chênh lệch đối soát...)
 2. **Ghi vào `control.quality_metrics`** — dù pass hay fail đều được log, không bao giờ âm thầm bỏ qua
-3. **Phân loại theo severity**: `BLOCKING` (raise và dừng pipeline — dùng cho lỗi schema, vi phạm business rule, sai lệch đối soát ở mart) và `WARNING` (chỉ log rồi tiếp tục — dùng cho khoá ngoại orphan ở Gold, vì trong pipeline chạy song song, việc dimension load trễ hơn fact một nhịp là chuyện bình thường)
+3. **Phân loại theo severity**: `BLOCKING` (raise và dừng pipeline — dùng cho lỗi schema, vi phạm business rule, sai lệch đối soát ở mart) và `WARNING` (chỉ log rồi tiếp tục)
 4. **Quarantine các dòng vi phạm** vào `control.failed_records` bằng anti-join, thay vì drop âm thầm không để lại dấu vết
 5. **Ghi audit trail đầy đủ** cho mỗi lần chạy (`run_id`, số dòng input/output/bị loại, thời điểm bắt đầu/kết thúc, message lỗi) vào `control.audit_log`
 
 Mỗi check được gán vào 1 trong 5 dimension của data quality: **validity, completeness, integrity, accuracy, consistency**.
 
-### Một đánh đổi thiết kế đáng nói
+### Một quyết định thiết kế đáng nói
 
-Các bảng fact ở Gold được build song song theo từng bảng cùng lúc với Silver, không bị chặn lại chờ "tất cả dimension load xong". Điều này có nghĩa 1 fact table có thể tạm thời join phải dimension chưa kịp cập nhật (sinh ra khoá ngoại orphan). Thay vì chặn cứng cả pipeline vì tình huống race-condition vốn đã lường trước này, các check orphan được để ở mức `WARNING`: vẫn log, vẫn quarantine, vẫn theo dõi được — nhưng không làm fail job. Ngược lại, các check đối soát ở Mart luôn là `BLOCKING`, vì một con số sai lọt lên dashboard cho business là lỗi về tính đúng đắn, không phải do timing.
+Toàn bộ pipeline dùng chiến lược high-watermark incremental load: mỗi bảng ở mỗi layer lưu lại giá trị watermark lớn nhất đã xử lý (control.job_control), và lần chạy sau chỉ đọc phần dữ liệu mới hơn giá trị đó — ở Bronze dựa trên cột nghiệp vụ (update_at), còn từ Silver trở lên dùng ingest_at do chính pipeline sinh ra.
+
+Lựa chọn này mang lại vài lợi ích rõ rệt so với việc full-load lại toàn bộ bảng mỗi lần chạy:
+
+- Chi phí tính toán tối thiểu: mỗi lần chạy chỉ xử lý đúng phần dữ liệu mới, không phải quét lại toàn bộ lịch sử — quan trọng khi dữ liệu nguồn ngày càng lớn theo thời gian.
+- Không cần hạ tầng phức tạp: không đòi hỏi CDC, không cần Debezium hay Kafka, chỉ cần 1 cột timestamp tăng dần ở nguồn và 1 bảng control nhỏ để lưu trạng thái — dễ triển khai, dễ debug, dễ giải thích cho người khác trong team.
+- Tách biệt rõ trạng thái xử lý khỏi dữ liệu nghiệp vụ: watermark được lưu tập trung trong control.job_control theo từng cặp (layer, table_name), nên có thể theo dõi tiến độ của từng bảng độc lập, dễ dàng reset lại 1 bảng cụ thể để full-load lại mà không ảnh hưởng các bảng khác.
+- Tương thích tự nhiên với thiết kế song song theo bảng: vì mỗi bảng tự quản lý watermark riêng, các task ở Airflow có thể chạy song song mà không tranh chấp trạng thái lẫn nhau — đúng với mục tiêu giữ tính song song xuyên suốt DAG mà mình đã thiết kế.
+
 
 ## Cấu trúc project
 
 ```
-docker-compose.yml
+docker-compose.yml            
 docker/
   Dockerfile.spark          # Spark + Delta + S3A + Postgres JDBC
   Dockerfile.airflow        # Airflow + Spark provider + Trino client
@@ -79,7 +88,6 @@ docker/
   Dockerfile.superset       # Superset + driver SQLAlchemy cho Trino
 airflow/dags/
   lakehouse_pipeline.py     # DAG Bronze → Silver → Gold → Mart
-  dq_utils.py               # hàm cảnh báo + giám sát DQ
 spark/jobs/
   ingest_bronze.py
   transform_silver.py
@@ -90,8 +98,8 @@ spark/utils/
   validation.py              # check schema, row-loss, business rule, referential integrity
 load_data/
   init_lakehouse.sh          # tạo bucket MinIO + schema Trino + các bảng control
-  seed_quality_checks.sh     # ghi tài liệu các rule đang chạy vào control.quality_checks
-  setup_superset_dashboard.py
+  init_postgres.sql          # tạo bảng cho nguồn
+  load_csv_to_db             # load các file csv vào nguồn postgres
 ```
 
 ## Cách chạy
@@ -106,15 +114,11 @@ Lệnh này khởi động Postgres (nguồn), Spark (1 master + 2 worker), MinI
 2. Trigger DAG `lakehouse_pipeline` từ Airflow UI (`localhost:8090`)
 3. Truy vấn kết quả qua Trino (`localhost:8085`) hoặc xem dashboard trên Superset (`localhost:8088`)
 
-## Tình trạng hiện tại
-
-- ✅ Pipeline Bronze / Silver / Gold / Mart đã tích hợp đầy đủ DQ (metric, quarantine, audit log)
-- ✅ Trino liên kết truy vấn được xuyên suốt mọi layer, kể cả schema `control`
-- 🚧 Cảnh báo lỗi qua Airflow (Slack webhook trong `dq_utils.py`) — đã code xong, đang chờ test end-to-end
-- 🚧 Dashboard DQ trên Superset (xu hướng pass-rate, độ trễ dữ liệu, thống kê failed-records) — script tự tạo dataset đã xong, đang dựng dashboard
 
 ## Những gì mình sẽ cải thiện tiếp
 
 - Chuyển các dict rule đang hard-code (`BRONZE_RULES`, `SILVER_RULES`) vào `control.quality_checks` để thành một rule engine thực sự đọc động từ metadata
 - Tách riêng số liệu "bị loại vì null" và "bị loại vì trùng key" thay vì gộp chung vào 1 con số `rejected_rows`
-- Thêm SLA về độ tươi (freshness) của dữ liệu với cảnh báo tự động khi dữ liệu bị trễ, thay vì chỉ xem thụ động qua dashboard
+- Thêm quarantine table để việc xử lý lỗi dễ dàng hơn
+- Cảnh báo lỗi qua Airflow (Slack webhook) — sẽ hoàn thiện sau
+- Tối ưu hóa pipeline - sẽ hoàn thiện sau
