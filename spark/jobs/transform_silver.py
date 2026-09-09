@@ -276,10 +276,10 @@ def main():
     table_configs = {
         "users":        {"clean_fn": clean_users,        "max_loss_pct": 5.0,  "use_merge": True},
         "products":     {"clean_fn": clean_products,     "max_loss_pct": 5.0,  "use_merge": True},
-        "sessions":     {"clean_fn": clean_sessions,     "max_loss_pct": 5.0,  "use_merge": False},
-        "interactions": {"clean_fn": clean_interactions, "max_loss_pct": 20.0, "use_merge": False},
-        "purchases":    {"clean_fn": clean_purchases,    "max_loss_pct": 5.0,  "use_merge": False},
-        "reviews":      {"clean_fn": clean_reviews,      "max_loss_pct": 5.0,  "use_merge": False},
+        "sessions":     {"clean_fn": clean_sessions,     "max_loss_pct": 5.0,  "use_merge": True},
+        "interactions": {"clean_fn": clean_interactions, "max_loss_pct": 20.0, "use_merge": True},
+        "purchases":    {"clean_fn": clean_purchases,    "max_loss_pct": 5.0,  "use_merge": True},
+        "reviews":      {"clean_fn": clean_reviews,      "max_loss_pct": 5.0,  "use_merge": True},
     }
 
     args = parse_args()

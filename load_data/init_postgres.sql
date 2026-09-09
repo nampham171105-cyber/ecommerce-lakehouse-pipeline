@@ -50,7 +50,7 @@ CREATE TABLE purchases (
     product_id varchar(100) references products(product_id),
     session_id varchar(100) references sessions(session_id),
     interaction_id varchar(100) references interactions(interaction_id),
-    quantity int, 
+    quantity int,  
     unit_price decimal(18,2),
     total_amount decimal(18,2),
     order_date timestamp
