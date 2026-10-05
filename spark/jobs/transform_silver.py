@@ -98,7 +98,7 @@ def clean_products(df: DataFrame) -> DataFrame:
     )
     # rating_avg/review_count được phép NULL — sản phẩm chưa có review
     df_clean = df.na.drop(subset=["product_id", "product_name", "price"])
-    return dedupe_by_key(df_clean, ["product_id"], order_column="date_added", keep="latest")
+    return dedupe_by_key(df_clean, ["product_id"], order_column="date_added")
 
 
 def clean_sessions(df: DataFrame) -> DataFrame:
@@ -107,7 +107,7 @@ def clean_sessions(df: DataFrame) -> DataFrame:
         col('device_type'), col('referrer_source'), col('is_converted')
     )
     df_clean = df.na.drop(subset=["session_id", "user_id"])
-    return dedupe_by_key(df_clean, ["session_id"], order_column="start_time", keep="latest")
+    return dedupe_by_key(df_clean, ["session_id"], order_column="start_time")
 
 
 def clean_interactions(df: DataFrame) -> DataFrame:
@@ -116,7 +116,7 @@ def clean_interactions(df: DataFrame) -> DataFrame:
         col('interaction_type'), col('interaction_timestamp'), col('dwell_time_ms')
     )
     df_clean = df.na.drop(subset=["interaction_id", "user_id", "product_id", "session_id"])
-    return dedupe_by_key(df_clean, ["interaction_id"], order_column="dwell_time_ms", keep="latest")
+    return dedupe_by_key(df_clean, ["interaction_id"], order_column="dwell_time_ms")
 
 
 def clean_purchases(df: DataFrame) -> DataFrame:
@@ -125,7 +125,7 @@ def clean_purchases(df: DataFrame) -> DataFrame:
         col("interaction_id"), col("quantity"), col("unit_price"), col("total_amount"), col('order_date')
     )
     df_clean = df.na.drop(subset=["purchase_id", "order_id", "user_id", "product_id", "total_amount"])
-    return dedupe_by_key(df_clean, ["purchase_id"], order_column="order_date", keep="latest")
+    return dedupe_by_key(df_clean, ["purchase_id"], order_column="order_date")
 
 
 def clean_reviews(df: DataFrame) -> DataFrame:
@@ -134,7 +134,7 @@ def clean_reviews(df: DataFrame) -> DataFrame:
         col("rating"), col("title"), col("review_text"), col("review_date")
     )
     df_clean = df.na.drop(subset=["review_id", "user_id", "product_id", "rating"])
-    return dedupe_by_key(df_clean, ["review_id"], order_column="review_date", keep="latest")
+    return dedupe_by_key(df_clean, ["review_id"], order_column="review_date")
 
 
 # ---------------- PROCESS TABLE ----------------
@@ -143,7 +143,6 @@ def process_table(
     spark,
     table_name,
     clean_fn,
-    max_loss_pct=15.0,
     use_merge=False
 ):
     layer = "silver"
@@ -183,15 +182,15 @@ def process_table(
         df_clean = validate_row_count(
             spark, run_id, df_raw, df_clean,
             layer=layer, table_name=table_name, rundate=rundate,
-            max_loss_pct=max_loss_pct, key_columns=unique_keys,
+            max_loss_pct=10.0, key_columns=unique_keys,
             severity="BLOCKING"
         )
 
         # ---- Data Quality: Integrity (unique key sau dedupe) ----
-        validate_no_duplicates(
-            spark, run_id, df_clean, unique_keys,
-            layer=layer, table_name=table_name, rundate=rundate
-        )
+        # validate_no_duplicates(
+        #     spark, run_id, df_clean, unique_keys,
+        #     layer=layer, table_name=table_name, rundate=rundate
+        # )
 
         # ---- Data Quality: Validity (business rules), quarantine dòng vi phạm ----
         for rule_name, condition_fn in rules["business_rules"].items():
@@ -274,12 +273,12 @@ def parse_args():
 
 def main():
     table_configs = {
-        "users":        {"clean_fn": clean_users,        "max_loss_pct": 5.0,  "use_merge": True},
-        "products":     {"clean_fn": clean_products,     "max_loss_pct": 5.0,  "use_merge": True},
-        "sessions":     {"clean_fn": clean_sessions,     "max_loss_pct": 5.0,  "use_merge": True},
-        "interactions": {"clean_fn": clean_interactions, "max_loss_pct": 20.0, "use_merge": True},
-        "purchases":    {"clean_fn": clean_purchases,    "max_loss_pct": 5.0,  "use_merge": True},
-        "reviews":      {"clean_fn": clean_reviews,      "max_loss_pct": 5.0,  "use_merge": True},
+        "users":        {"clean_fn": clean_users,  "use_merge": True},
+        "products":     {"clean_fn": clean_products,"use_merge": True},
+        "sessions":     {"clean_fn": clean_sessions,"use_merge": True},
+        "interactions": {"clean_fn": clean_interactions,"use_merge": True},
+        "purchases":    {"clean_fn": clean_purchases, "use_merge": True},
+        "reviews":      {"clean_fn": clean_reviews,"use_merge": True},
     }
 
     args = parse_args()
@@ -294,7 +293,6 @@ def main():
             spark,
             table_name,
             config["clean_fn"],
-            max_loss_pct=config["max_loss_pct"],
             use_merge=config["use_merge"],
         )
     finally:

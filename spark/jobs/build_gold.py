@@ -2,7 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql import DataFrame
 from job_control import generate_run_id, get_watermark, insert_log, insert_audit
-from validation import validate_business_rule
+from validation import validate_referential_integrity
 from delta.tables import DeltaTable
 from datetime import datetime, date
 import argparse
@@ -290,7 +290,6 @@ def build_table(
     write_mode: str = "append",
     merge_key: list = None,
     orphan_check_columns: list = None,
-    business_key: str = None,
 ):
     layer = "gold"
     run_id = generate_run_id(layer, gold_table_name)
@@ -328,16 +327,30 @@ def build_table(
 
         # ---- Data Quality: Integrity — fact join dim bị orphan (dim_sk NULL) ----
         # KHÔNG chặn pipeline (severity=WARNING): orphan hiếm khi có nghĩa dữ liệu sai,
-        # thường do dim chưa kịp cập nhật (out-of-order). Vẫn quarantine để theo dõi.
+        # thường do dim chưa kịp cập nhật (late data arriving)
+        dim_mapping = {
+            "user_id": "gold.dim_user",
+            "product_id": "gold.dim_product",
+            "session_id": "gold.dim_session",
+        }
+
         if orphan_check_columns:
-            for sk_col in orphan_check_columns:
-                validate_business_rule(
-                    spark, run_id, df_built,
-                    rule_name=f"{sk_col}_not_null",
-                    condition=col(sk_col).isNotNull(),
-                    key_columns=[business_key] if business_key else None,
-                    layer=layer, table_name=gold_table_name, rundate=rundate,
-                    max_violation_pct=5.0, severity="WARNING"
+            for nk_col in orphan_check_columns:
+                dim_table = dim_mapping.get(nk_col)
+                if not dim_table:
+                    continue
+                
+                validate_referential_integrity(
+                    spark, run_id,
+                    df_fact=df_built, 
+                    df_dim=spark.read.table(dim_table).select(nk_col).distinct(),
+                    fact_key=nk_col,  
+                    dim_key=nk_col,    
+                    layer=layer, 
+                    table_name=gold_table_name, 
+                    rundate=rundate,
+                    max_orphan_pct=5.0, 
+                    severity="WARNING",
                 )
 
         if write_mode == "append":
@@ -413,7 +426,6 @@ GOLD_CONFIG = {
         "write_mode": "merge_scd1",
         "merge_key": ["product_id"],
         "orphan_check_columns": None,
-        "business_key": "product_id",
     },
     "dim_session": {
         "source_table_name": "sessions",
@@ -421,31 +433,27 @@ GOLD_CONFIG = {
         "write_mode": "merge_scd1",
         "merge_key": ["session_id"],
         "orphan_check_columns": None,
-        "business_key": "session_id",
     },
     "fact_interaction": {
         "source_table_name": "interactions",
         "build_fn": build_fact_interaction,
         "write_mode": "merge_scd1",
         "merge_key": ["interaction_id"],
-        "orphan_check_columns": ["user_sk", "product_sk", "session_sk", "date_sk"],
-        "business_key": "interaction_id",
+        "orphan_check_columns": ["user_id", "product_id", "session_id"],
     },
     "fact_purchase": {
         "source_table_name": "purchases",
         "build_fn": build_fact_purchase,
         "write_mode": "merge_scd1",
         "merge_key": ["purchase_id"],
-        "orphan_check_columns": ["user_sk", "product_sk", "session_sk", "date_sk"],
-        "business_key": "purchase_id",
+        "orphan_check_columns": ["user_id", "product_id", "session_id"],
     },
     "fact_review": {
         "source_table_name": "reviews",
         "build_fn": build_fact_review,
         "write_mode": "merge_scd1",
         "merge_key": "review_id",
-        "orphan_check_columns": ["user_sk", "product_sk", "date_sk"],
-        "business_key": "review_id",
+        "orphan_check_columns": ["user_id", "product_id"],
     },
 }
 
@@ -483,7 +491,6 @@ def main():
             write_mode=config["write_mode"],
             merge_key=config["merge_key"],
             orphan_check_columns=config["orphan_check_columns"],
-            business_key=config["business_key"],
         )
 
     spark.stop()

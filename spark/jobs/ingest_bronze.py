@@ -15,8 +15,15 @@ def create_spark_session():
 BRONZE_RULES = {
     "users": {
         "expected_columns": {
-            "user_id", "age", "gender", "country", "city", "signup_date",
-            "income_level", "preferred_category", "loyalty_tier"
+            "user_id": "string",
+            "age": "int",
+            "gender": "string",
+            "country": "string",
+            "city": "string",
+            "signup_date": "date",
+            "income_level": "string",
+            "preferred_category": "string",
+            "loyalty_tier": "string"
         },
         "min_rows": 1,
         "duplicate_key": ["user_id"],
@@ -24,9 +31,17 @@ BRONZE_RULES = {
     },
     "products": {
         "expected_columns": {
-            "product_id", "product_name", "product_description", "category",
-            "subcategory", "brand", "price", "rating_avg", "review_count",
-            "stock_quantity", "date_added"
+            "product_id": "string",
+            "product_name": "string",
+            "product_description": "string",
+            "category": "string",
+            "subcategory": "string",
+            "brand": "string",
+            "price": "decimal(18,2)",
+            "rating_avg": "double",  # Postgres float map sang Spark double
+            "review_count": "int",
+            "stock_quantity": "int",
+            "date_added": "date"
         },
         "min_rows": 1,
         "duplicate_key": ["product_id"],
@@ -34,8 +49,12 @@ BRONZE_RULES = {
     },
     "sessions": {
         "expected_columns": {
-            "session_id", "user_id", "start_time", "device_type",
-            "referrer_source", "is_converted"
+            "session_id": "string",
+            "user_id": "string",
+            "start_time": "timestamp",
+            "device_type": "string",
+            "referrer_source": "string",
+            "is_converted": "boolean"
         },
         "min_rows": 1,
         "duplicate_key": ["session_id"],
@@ -43,8 +62,13 @@ BRONZE_RULES = {
     },
     "interactions": {
         "expected_columns": {
-            "interaction_id", "user_id", "product_id", "session_id",
-            "interaction_type", "interaction_timestamp", "dwell_time_ms"
+            "interaction_id": "string",
+            "user_id": "string",
+            "product_id": "string",
+            "session_id": "string",
+            "interaction_type": "string",
+            "interaction_timestamp": "timestamp",
+            "dwell_time_ms": "int"
         },
         "min_rows": 1,
         "duplicate_key": ["interaction_id"],
@@ -52,8 +76,16 @@ BRONZE_RULES = {
     },
     "purchases": {
         "expected_columns": {
-            "purchase_id", "order_id", "user_id", "product_id", "session_id",
-            "interaction_id", "quantity", "unit_price", "total_amount", "order_date"
+            "purchase_id": "string",
+            "order_id": "string",
+            "user_id": "string",
+            "product_id": "string",
+            "session_id": "string",
+            "interaction_id": "string",
+            "quantity": "int",
+            "unit_price": "decimal(18,2)",
+            "total_amount": "decimal(18,2)",
+            "order_date": "timestamp"
         },
         "min_rows": 1,
         "duplicate_key": ["purchase_id"],
@@ -61,8 +93,14 @@ BRONZE_RULES = {
     },
     "reviews": {
         "expected_columns": {
-            "review_id", "user_id", "product_id", "purchase_id", "rating",
-            "title", "review_text", "review_date"
+            "review_id": "string",
+            "user_id": "string",
+            "product_id": "string",
+            "purchase_id": "string",
+            "rating": "int",
+            "title": "string",
+            "review_text": "string",
+            "review_date": "timestamp"
         },
         "min_rows": 1,
         "duplicate_key": ["review_id"],

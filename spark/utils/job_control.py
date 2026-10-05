@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import col, concat_ws, current_timestamp, to_timestamp, lit, max as spark_max
+from pyspark.sql.functions import col, concat_ws, current_timestamp, expr, lit, max as spark_max
 from delta import DeltaTable
 from pyspark.sql.types import (
     StructType, StructField, StringType, TimestampNTZType, LongType
@@ -136,21 +136,21 @@ def truncate_logs(spark: SparkSession) -> bool:
 # Nếu bảng chưa được seed dữ liệu, trả về [] và pipeline dùng fallback
 # hard-code trong file .py như hiện tại.
 # ============================================================
-def get_active_checks(spark: SparkSession, layer: str, table_name: str):
-    try:
-        df = spark.read.table(QUALITY_CHECKS_TABLE)
-        rows = (
-            df.filter(
-                (col("layer") == layer)
-                & (col("table_name") == table_name)
-                & (col("is_active") == True)
-            )
-            .collect()
-        )
-        return [r.asDict() for r in rows]
-    except Exception as e:
-        print(f"[QUALITY_CHECKS] Get active checks failed (dùng fallback code): {e}")
-        return []
+# def get_active_checks(spark: SparkSession, layer: str, table_name: str):
+#     try:
+#         df = spark.read.table(QUALITY_CHECKS_TABLE)
+#         rows = (
+#             df.filter(
+#                 (col("layer") == layer)
+#                 & (col("table_name") == table_name)
+#                 & (col("is_active") == True)
+#             )
+#             .collect()
+#         )
+#         return [r.asDict() for r in rows]
+#     except Exception as e:
+#         print(f"[QUALITY_CHECKS] Get active checks failed (dùng fallback code): {e}")
+#         return []
 
 
 # ============================================================
@@ -215,30 +215,28 @@ def insert_failed_records(
     if df_rejected is None:
         return 0
 
-    if df_rejected.limit(1).count() == 0:
+    count = df_rejected.count()
+    if count == 0:
         return 0
 
     try:
         light_df = (
             df_rejected
             .select(concat_ws("|", *[col(c) for c in key_columns]).alias("record_id"))
-            .withColumn("failed_record_id", lit(None).cast("string"))
+            .withColumn("failed_record_id", expr("uuid()"))
             .withColumn("run_id", lit(run_id))
             .withColumn("layer", lit(layer))
             .withColumn("table_name", lit(table_name))
             .withColumn("failure_reason", lit(failure_reason))
             .withColumn("rundate", lit(rundate))
-            .withColumn("logged_at", current_timestamp().cast("timestamp_ntz"))
+            .withColumn("created_at", current_timestamp().cast("timestamp_ntz"))
         )
 
-        # gán id ngẫu nhiên qua UDF nhẹ để tránh phải dùng monotonically_increasing_id (không ổn định khi append)
-        import pyspark.sql.functions as F
-        gen_uuid = F.udf(lambda: uuid.uuid4().hex)
-        light_df = light_df.withColumn("failed_record_id", gen_uuid())
-
-        light_df.write.format("delta").mode("append").saveAsTable(FAILED_RECORDS_TABLE)
-        count = light_df.count()
+        # 3. Ghi dữ liệu
+        light_df.write.format("delta").mode("append").saveAsTable("control.failed_records")
         print(f"[FAILED_RECORDS] {layer}.{table_name}: {count} record(s) logged ({failure_reason})")
+        
+        # 4. Trả về biến count đã đếm ở bước 1
         return count
 
     except Exception as e:

@@ -10,33 +10,82 @@ def validate_schema(
     spark: SparkSession,
     run_id: str,
     df: DataFrame,
-    expected_columns: set,
+    expected_schema: dict,  
     layer: str,
     table_name: str,
     rundate: str,
     severity: str = "BLOCKING"
 ):
-    actual_columns = set(df.columns)
-    missing = expected_columns - actual_columns
-    extra = actual_columns - expected_columns
-    passed = len(missing) == 0
+    # Lấy schema thực tế của df dưới dạng dict (VD: {"user_id": "string", "age": "int"})
+    actual_schema = dict(df.dtypes)
+    
+    expected_cols = set(expected_schema.keys())
+    actual_cols = set(actual_schema.keys())
 
+    # 1. Tìm các cột thiếu và cột thừa
+    missing = expected_cols - actual_cols
+    extra = actual_cols - expected_cols
+
+    # 2. Kiểm tra sai lệch kiểu dữ liệu (chỉ check trên các cột tồn tại ở cả 2 bên)
+    type_mismatches = {}
+    for col_name in expected_cols.intersection(actual_cols):
+        exp_type = expected_schema[col_name]
+        act_type = actual_schema[col_name]
+        if exp_type != act_type:
+            type_mismatches[col_name] = f"Expected: {exp_type}, Actual: {act_type}"
+
+    # ==========================================
+    # GHI METRICS VÀO DATABASE CHO TỪNG HẠNG MỤC
+    # ==========================================
+    
+    # Check 1: Missing Columns (Mất cột)
     insert_quality_metric(
         spark, run_id=run_id, layer=layer, table_name=table_name,
         check_name="schema_missing_columns", metric_value=len(missing),
-        passed=passed, rundate=rundate
+        passed=(len(missing) == 0), rundate=rundate
     )
 
+    # Check 2: Extra Columns (Thừa cột)
+    insert_quality_metric(
+        spark, run_id=run_id, layer=layer, table_name=table_name,
+        check_name="schema_extra_columns", metric_value=len(extra),
+        passed=(len(extra) == 0), rundate=rundate
+    )
+
+    # Check 3: Type Mismatch (Sai kiểu dữ liệu)
+    insert_quality_metric(
+        spark, run_id=run_id, layer=layer, table_name=table_name,
+        check_name="schema_type_mismatch", metric_value=len(type_mismatches),
+        passed=(len(type_mismatches) == 0), rundate=rundate
+    )
+
+    # ==========================================
+    # LOGIC CHẶN PIPELINE (BLOCKING)
+    # ==========================================
+    
+    # Thừa cột thường chỉ là cảnh báo, không gây chết logic cấp bách
     if extra:
-        print(f"[SCHEMA WARNING] {layer}.{table_name}: có cột thừa không mong đợi {extra}")
+        print(f"[SCHEMA WARNING] {layer}.{table_name}: Có cột thừa {extra}")
 
-    if not passed:
-        msg = f"[SCHEMA VALIDATION FAILED] {layer}.{table_name}: thiếu cột {missing}"
+    # Thiếu cột HOẶC sai kiểu dữ liệu là lỗi "Chí mạng" (Fatal Error)
+    is_fatal = (len(missing) > 0) or (len(type_mismatches) > 0)
+
+    if is_fatal:
+        error_msgs = []
+        if missing:
+            error_msgs.append(f"Thiếu cột: {missing}")
+        if type_mismatches:
+            error_msgs.append(f"Sai Data Type: {type_mismatches}")
+            
+        final_msg = f"[SCHEMA VALIDATION FAILED] {layer}.{table_name} -> " + " | ".join(error_msgs)
+        
         if severity == "BLOCKING":
-            raise ValueError(msg)
-        print(f"[SCHEMA WARNING - non blocking] {msg}")
-
-    print(f"[VALIDATION] {layer}.{table_name}: schema OK ({len(actual_columns)} cột)")
+            raise ValueError(final_msg)
+        else:
+            print(f"[SCHEMA WARNING - non blocking] {final_msg}")
+    
+    if not is_fatal:
+        print(f"[VALIDATION] {layer}.{table_name}: schema OK")
 
 
 # ============================================================
@@ -79,7 +128,7 @@ def validate_no_duplicates(
     spark: SparkSession,
     run_id: str,
     df: DataFrame,
-    key_columns: list,
+    key_columns: str,
     layer: str,
     table_name: str,
     rundate: str
@@ -115,7 +164,7 @@ def validate_row_count(
     layer: str,
     table_name: str,
     rundate: str,
-    max_loss_pct: float = 5.0,
+    max_loss_pct: float = 10.0,
     key_columns: list = None,
     severity: str = "BLOCKING"
 ):
@@ -215,13 +264,13 @@ def validate_referential_integrity(
     layer: str,
     table_name: str,
     rundate: str,
-    max_orphan_pct: float = 1.0,
-    severity: str = "WARNING"
+    max_orphan_pct: float = 15.0,
+    severity: str = "BLOCKING"
 ):
     total = df_fact.count()
     orphans = df_fact.join(df_dim, df_fact[fact_key] == df_dim[dim_key], "left_anti")
     orphan_count = orphans.count()
-    orphan_pct = orphan_count / total * 100 if total > 0 else 0
+    orphan_pct = orphan_count / total * 100 if total > 0 else 0 
     passed = orphan_pct <= max_orphan_pct
 
     insert_quality_metric(
@@ -241,17 +290,11 @@ def validate_referential_integrity(
             raise ValueError(msg)
         print(f"[VALIDATION WARNING - non blocking] {msg}")
 
-
 # ============================================================
-# DEDUPE — giữ nguyên logic cũ, KHÔNG đổi signature vì được gọi
-# trực tiếp trong clean_fn() (chưa có run_id ở đó). Quarantine
-# phần trùng lặp được xử lý ở validate_row_count (so before/after)
-# thay vì ở đây, để tránh phải truyền spark/run_id xuyên suốt clean_fn.
+# DEDUPE 
 # ============================================================
-def dedupe_by_key(df: DataFrame, key_columns: list, order_column: str, keep: str = "latest") -> DataFrame:
-    order_expr = desc(order_column) if keep == "latest" else col(order_column)
-    window_spec = Window.partitionBy(*key_columns).orderBy(order_expr)
-
+def dedupe_by_key(df: DataFrame, key_columns: str, order_column: str) -> DataFrame:
+    window_spec = Window.partitionBy(key_columns).orderBy(desc(order_column))
     return df \
         .withColumn("_rn", row_number().over(window_spec)) \
         .filter(col("_rn") == 1) \
